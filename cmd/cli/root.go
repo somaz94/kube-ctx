@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -92,6 +93,9 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newDeleteCmd(a),
 		newAliasCmd(a),
 		newDoctorCmd(a),
+		newShellCmd(a),
+		newExecCmd(a),
+		newInitCmd(a),
 		newVersionCmd(a),
 	)
 	return root
@@ -116,6 +120,24 @@ func normalizeArgs(args []string) []string {
 		out = append(out, arg)
 	}
 	return out
+}
+
+// exitError carries a process exit status with no message of its own: the
+// command has already told the user everything relevant.
+type exitError struct{ code int }
+
+func (e *exitError) Error() string { return "" }
+
+// ExitCode maps an Execute error onto a process exit status.
+func ExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var e *exitError
+	if errors.As(err, &e) {
+		return e.code
+	}
+	return 1
 }
 
 // Execute runs the root command against the process streams.

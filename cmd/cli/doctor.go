@@ -83,22 +83,13 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 
 	for _, r := range results {
 		if !r.Healthy() {
-			// A non-zero exit makes the command usable as a check in a script,
-			// without printing a second error line the table already showed.
-			return errUnhealthyContexts
+			// A non-zero exit makes the command usable as a check in a script.
+			// The error is silent because the table already said what is wrong.
+			return &exitError{code: 1}
 		}
 	}
 	return nil
 }
-
-// errUnhealthyContexts signals a non-zero exit without adding noise: the table
-// already said what is wrong.
-var errUnhealthyContexts = &silentError{}
-
-// silentError carries an exit status but no message.
-type silentError struct{}
-
-func (e *silentError) Error() string { return "" }
 
 // renderDoctorTable prints one row per probed context.
 func renderDoctorTable(a *app, current string, results []probe.Result) error {

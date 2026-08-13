@@ -127,7 +127,7 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 	if err := contexts.SetNamespace(cfg, "", target); err != nil {
 		return err
 	}
-	if err := a.loader().Save(cfg); err != nil {
+	if err := saveSwitch(a, cfg, cfg.CurrentContext); err != nil {
 		return err
 	}
 

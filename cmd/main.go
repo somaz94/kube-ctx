@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if err := cli.Execute(); err != nil {
-		os.Exit(1)
-	}
+	// The exit status matters: "kctx exec <ctx> -- kubectl ..." passes the
+	// command's own status through, and "kctx doctor" is meant to gate scripts.
+	os.Exit(cli.ExitCode(cli.Execute()))
 }

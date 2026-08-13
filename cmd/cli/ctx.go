@@ -102,7 +102,7 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.loader().Save(cfg); err != nil {
+	if err := saveSwitch(a, cfg, target); err != nil {
 		return err
 	}
 
@@ -124,6 +124,21 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	_, err = fmt.Fprintf(a.out, "Switched to context %s (namespace %s).%s\n",
 		pal.Bold(target), pal.Cyan(namespace), guardSuffix(a, target))
 	return err
+}
+
+// saveSwitch persists a switch, shell-locally when the hook is installed and
+// globally otherwise.
+func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
+	shellLocal, err := startShellSession(a, cfg, target)
+	if err != nil {
+		return err
+	}
+	if shellLocal {
+		// The change lives in this shell's private copy; the global kubeconfig
+		// is deliberately left exactly as it was.
+		return nil
+	}
+	return a.loader().Save(cfg)
 }
 
 // confirmGuard asks for confirmation when a guard rule demands it before
