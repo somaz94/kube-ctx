@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/somaz94/kube-ctx/pkg/contexts"
+	"github.com/somaz94/kube-ctx/pkg/picker"
 )
 
 // newCtxCmd switches the current context.
@@ -40,13 +42,15 @@ func runCtx(a *app, args []string, back int) error {
 	}
 
 	target, err := resolveContextArg(a, cfg, args, back)
-	if err != nil {
-		return err
-	}
-	if target == "" {
-		// Nothing to switch to: print the list the way kubectx does when it
-		// cannot go interactive.
+	switch {
+	case errors.Is(err, picker.ErrAborted):
+		return nil // the user changed their mind; nothing to report
+	case errors.Is(err, errPickerUnavailable):
+		// No terminal to prompt on: print the list, the way kubectx does when
+		// it cannot go interactive.
 		return printContextNames(a, cfg)
+	case err != nil:
+		return err
 	}
 	return switchContext(a, cfg, target)
 }
@@ -69,7 +73,7 @@ func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int
 	}
 
 	if len(args) == 0 {
-		return "", nil
+		return pickContext(a, cfg)
 	}
 
 	userCfg, err := a.userConfig()

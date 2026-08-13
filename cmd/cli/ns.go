@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/somaz94/kube-ctx/pkg/contexts"
 	"github.com/somaz94/kube-ctx/pkg/namespaces"
+	"github.com/somaz94/kube-ctx/pkg/picker"
 )
 
 // nsHistoryPrefix keeps namespace history separate per context: "back one
@@ -61,9 +63,38 @@ func runNs(a *app, args []string, back int, refresh bool, timeout time.Duration)
 		return err
 	}
 	if target == "" {
-		return listNamespaces(a, cfg, refresh, timeout)
+		target, err = chooseNamespace(a, cfg, refresh, timeout)
+		switch {
+		case errors.Is(err, picker.ErrAborted):
+			return nil // the user changed their mind; nothing to report
+		case err != nil:
+			return err
+		case target == "":
+			return nil // already listed, because there was no terminal
+		}
 	}
 	return switchNamespace(a, cfg, target)
+}
+
+// chooseNamespace opens the picker over the namespaces of the current context.
+// When no terminal is available it prints the list instead and returns "".
+func chooseNamespace(a *app, cfg *clientcmdapi.Config, refresh bool, timeout time.Duration) (string, error) {
+	result, err := fetchNamespaces(a, cfg, refresh, timeout)
+	if err != nil {
+		return "", err
+	}
+	warnIfStale(a, result)
+
+	current, err := contexts.Namespace(cfg, "")
+	if err != nil {
+		return "", err
+	}
+
+	target, err := pickNamespace(a, current, result.Namespaces)
+	if errors.Is(err, errPickerUnavailable) {
+		return "", printNamespaces(a, result.Namespaces, current)
+	}
+	return target, err
 }
 
 // resolveNamespaceArg turns the command line into a namespace name, or "" when
@@ -116,20 +147,10 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 	return err
 }
 
-// listNamespaces prints the namespaces of the current context, marking the
-// active one.
-func listNamespaces(a *app, cfg *clientcmdapi.Config, refresh bool, timeout time.Duration) error {
-	result, err := fetchNamespaces(a, cfg, refresh, timeout)
-	if err != nil {
-		return err
-	}
-
-	current, err := contexts.Namespace(cfg, "")
-	if err != nil {
-		return err
-	}
+// printNamespaces writes one namespace per line, marking the active one.
+func printNamespaces(a *app, names []string, current string) error {
 	pal := a.palette()
-	for _, name := range result.Namespaces {
+	for _, name := range names {
 		line := name
 		if name == current {
 			line = pal.Bold(name)
@@ -138,10 +159,15 @@ func listNamespaces(a *app, cfg *clientcmdapi.Config, refresh bool, timeout time
 			return err
 		}
 	}
+	return nil
+}
+
+// warnIfStale tells the user when the namespace list came from an expired
+// cache, so a missing namespace is not mistaken for a deleted one.
+func warnIfStale(a *app, result namespaces.Result) {
 	if result.Source == namespaces.SourceCacheStale {
 		fmt.Fprintf(a.errOut, "warning: showing a stale cache; the API server was unreachable (%v)\n", result.Err)
 	}
-	return nil
 }
 
 // fetchNamespaces retrieves the namespace list for the current context.

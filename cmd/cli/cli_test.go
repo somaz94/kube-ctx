@@ -2,14 +2,18 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/somaz94/kube-ctx/internal/testutil"
+	"github.com/somaz94/kube-ctx/pkg/picker"
+	"github.com/somaz94/kube-ctx/pkg/render"
 )
 
 // harness is one isolated CLI invocation: its own kubeconfig, its own config
@@ -37,7 +41,35 @@ func newHarness(t *testing.T, spec testutil.Spec) *harness {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv(EnvShellID, "")
 
+	// Tests must never reach for the real terminal: a test binary launched
+	// from a shell has a usable /dev/tty, and the picker would block forever
+	// waiting for a keystroke. Individual tests opt in with scriptPicker.
+	original := newPicker
+	newPicker = func(string) (*picker.Picker, func() error, error) {
+		return nil, nil, errPickerUnavailable
+	}
+	t.Cleanup(func() { newPicker = original })
+
 	return &harness{t: t, kubeconfig: kubeconfig, in: strings.NewReader("")}
+}
+
+// scriptPicker replaces the terminal picker with one driven by keys.
+func scriptPicker(t *testing.T, keys string) *bytes.Buffer {
+	t.Helper()
+	var frames bytes.Buffer
+
+	original := newPicker
+	newPicker = func(prompt string) (*picker.Picker, func() error, error) {
+		return &picker.Picker{
+			In:      strings.NewReader(keys),
+			Out:     &frames,
+			Prompt:  prompt,
+			Height:  5,
+			Palette: render.NewEnabled(false),
+		}, nil, nil
+	}
+	t.Cleanup(func() { newPicker = original })
+	return &frames
 }
 
 // run executes one command line.
@@ -570,5 +602,115 @@ func TestCompleteContexts(t *testing.T) {
 	// A second positional argument has nothing to complete.
 	if got, _ := completeContexts(a)(nil, []string{"dev"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
+	}
+}
+
+// seedNamespaceCache writes a fresh namespace cache entry so the ns command
+// never needs a reachable API server.
+func seedNamespaceCache(t *testing.T, ctxName string, names ...string) {
+	t.Helper()
+	dir := filepath.Join(os.Getenv("XDG_CACHE_HOME"), "kube-ctx", "namespaces")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir cache: %v", err)
+	}
+	entry := struct {
+		Fetched    time.Time `json:"fetched"`
+		Namespaces []string  `json:"namespaces"`
+	}{Fetched: time.Now(), Namespaces: names}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ctxName+".json"), data, 0o600); err != nil {
+		t.Fatalf("write cache: %v", err)
+	}
+}
+
+func TestCtxPickerSelects(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	frames := scriptPicker(t, "prod\r")
+
+	if err := h.run("ctx"); err != nil {
+		t.Fatalf("ctx: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "prod" {
+		t.Errorf("current = %q, want prod", got)
+	}
+	if !strings.Contains(frames.String(), "prod") {
+		t.Errorf("picker frame did not render the contexts:\n%q", frames.String())
+	}
+	if !strings.Contains(frames.String(), "current") {
+		t.Errorf("the active context should be badged:\n%q", frames.String())
+	}
+}
+
+func TestCtxPickerAbortChangesNothing(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	scriptPicker(t, "\x03")
+
+	if err := h.run("ctx"); err != nil {
+		t.Fatalf("aborting the picker should not be an error: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q, want dev", got)
+	}
+	if h.stdout() != "" {
+		t.Errorf("stdout = %q, want nothing after an abort", h.stdout())
+	}
+}
+
+func TestNsPickerSelects(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	seedNamespaceCache(t, "dev", "default", "kube-system", "monitoring")
+	scriptPicker(t, "kube\r")
+
+	if err := h.run("ns"); err != nil {
+		t.Fatalf("ns: %v", err)
+	}
+	if got := h.config().Contexts["dev"].Namespace; got != "kube-system" {
+		t.Errorf("namespace = %q, want kube-system", got)
+	}
+}
+
+func TestNsPickerAbortChangesNothing(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	seedNamespaceCache(t, "dev", "default", "kube-system")
+	scriptPicker(t, "\x03")
+
+	if err := h.run("ns"); err != nil {
+		t.Fatalf("aborting the picker should not be an error: %v", err)
+	}
+	if got := h.config().Contexts["dev"].Namespace; got != "" {
+		t.Errorf("namespace = %q, want it untouched", got)
+	}
+}
+
+func TestNsNoArgsWithoutTerminalListsNamespaces(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	seedNamespaceCache(t, "dev", "default", "kube-system")
+
+	if err := h.run("ns"); err != nil {
+		t.Fatalf("ns: %v", err)
+	}
+	if !strings.Contains(h.stdout(), "kube-system") {
+		t.Errorf("stdout = %q", h.stdout())
+	}
+	if got := h.config().Contexts["dev"].Namespace; got != "" {
+		t.Errorf("listing must not change the namespace, got %q", got)
+	}
+}
+
+func TestPickerWithNoItemsFallsBack(t *testing.T) {
+	h := newHarness(t, testutil.Spec{})
+	scriptPicker(t, "\r")
+
+	// An empty context list has nothing to pick from, so the command falls
+	// back to listing rather than opening an empty picker.
+	if err := h.run("ctx"); err != nil {
+		t.Fatalf("ctx: %v", err)
+	}
+	if h.stdout() != "" {
+		t.Errorf("stdout = %q, want nothing", h.stdout())
 	}
 }
