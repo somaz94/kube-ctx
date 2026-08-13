@@ -1,0 +1,108 @@
+version: 2
+
+# Set explicitly: the archive is named after the project, the binary inside it
+# after the command, and those differ here (kube-ctx ships kctx).
+project_name: kube-ctx
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/main.go
+    binary: kctx
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/somaz94/kube-ctx/cmd/cli.Version={{.Version}}
+      - -X github.com/somaz94/kube-ctx/cmd/cli.GitCommit={{.Commit}}
+      - -X github.com/somaz94/kube-ctx/cmd/cli.BuildDate={{.Date}}
+
+archives:
+  - formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  groups:
+    - title: "Features"
+      regexp: '^feat'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^fix'
+      order: 1
+    - title: "Performance"
+      regexp: '^perf'
+      order: 2
+    - title: "Refactoring"
+      regexp: '^refactor'
+      order: 3
+    - title: "Build"
+      regexp: '^build'
+      order: 4
+    - title: "Other Changes"
+      order: 999
+  filters:
+    exclude:
+      - '^docs: update changelog'
+      - '^docs: update CONTRIBUTORS'
+      - '^Merge'
+      - '^Auto commit'
+
+release:
+  github:
+    owner: somaz94
+    name: kube-ctx
+  draft: false
+  prerelease: auto
+
+brews:
+  - repository:
+      owner: somaz94
+      name: homebrew-tap
+    homepage: "https://github.com/somaz94/kube-ctx"
+    description: "Switch Kubernetes contexts and namespaces, per-terminal and with production guards"
+    license: "Apache-2.0"
+    install: |
+      bin.install "kctx"
+    test: |
+      system "#{bin}/kctx", "version"
+    caveats: |
+      🎉 kctx installed!
+
+      Quick start:
+        kctx                       # Interactive context picker
+        kctx ctx prod-eks          # Switch context
+        kctx ns kube-system        # Switch namespace
+        kctx doctor                # Check every cluster
+        kctx --help                # Full usage
+
+      For per-terminal context isolation, add to your rc file:
+        eval "$(kctx init zsh)"    # bash: kctx init bash
+                                   # fish: kctx init fish | source
+
+      Docs: https://github.com/somaz94/kube-ctx
+
+scoops:
+  - repository:
+      owner: somaz94
+      name: scoop-bucket
+    homepage: "https://github.com/somaz94/kube-ctx"
+    description: "Switch Kubernetes contexts and namespaces, per-terminal and with production guards"
+    license: "Apache-2.0"

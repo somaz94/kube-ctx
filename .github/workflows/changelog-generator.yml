@@ -1,0 +1,44 @@
+name: Generate changelog
+
+on:
+  pull_request:
+    types: [closed]
+  issues:
+    types: [closed]
+  workflow_run:
+    workflows: ["Create release"]
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-changelog:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        uses: somaz94/go-changelog-action@v1
+        with:
+          output_file: CHANGELOG.md
+          include_non_conventional: false
+
+      - name: Git Commit and Push
+        uses: somaz94/go-git-commit-action@v1
+        with:
+          branch: main
+          commit_message: "docs: update changelog"
+          user_email: "actions@github.com"
+          user_name: "GitHub Actions"
+          file_pattern: "CHANGELOG.md"
+          github_token: ${{ secrets.GITHUB_TOKEN }}

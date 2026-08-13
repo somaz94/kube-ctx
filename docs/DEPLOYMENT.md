@@ -4,6 +4,56 @@
 
 ## Install
 
+### Homebrew
+
+```bash
+brew install somaz94/tap/kube-ctx
+brew upgrade somaz94/tap/kube-ctx
+```
+
+The formula lives in [somaz94/homebrew-tap](https://github.com/somaz94/homebrew-tap) and is published by GoReleaser on every tag.
+
+<br/>
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add somaz94 https://github.com/somaz94/scoop-bucket
+scoop install kube-ctx
+```
+
+The picker needs a terminal that understands ANSI escapes — Windows Terminal does, `cmd.exe` in its default configuration does not. Everything else works either way.
+
+<br/>
+
+### Install script
+
+```bash
+curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
+```
+
+Detects the platform, downloads the matching release archive, and installs `kctx` into `/usr/local/bin` (with `sudo` only when that directory is not writable).
+
+<br/>
+
+### Binary
+
+Release archives are named after the project, and the binary inside is `kctx`:
+
+```bash
+# latest
+curl -sL https://github.com/somaz94/kube-ctx/releases/latest/download/kube-ctx_linux_amd64.tar.gz | tar xz
+sudo mv kctx /usr/local/bin/
+
+# a specific version
+curl -sL https://github.com/somaz94/kube-ctx/releases/download/v0.1.0/kube-ctx_0.1.0_darwin_arm64.tar.gz | tar xz
+sudo mv kctx /usr/local/bin/
+```
+
+Builds are published for linux, darwin and windows on amd64 and arm64, with `checksums.txt` alongside them.
+
+<br/>
+
 ### From source
 
 ```bash
@@ -91,3 +141,28 @@ make build
 ```
 
 Version, commit and build date are injected with `-ldflags` at build time; a `go build` without them reports `dev`.
+
+<br/>
+
+## Cutting a release
+
+Pushing a `vX.Y.Z` tag is the whole procedure:
+
+```bash
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+`.github/workflows/release.yml` then runs GoReleaser, which builds every
+platform, creates the GitHub release, and updates the Homebrew tap and the
+Scoop bucket. `.github/workflows/changelog-generator.yml` regenerates
+`CHANGELOG.md` afterwards.
+
+Repository prerequisites:
+
+| Secret | Used by | Why |
+|---|---|---|
+| `PAT_TOKEN` | `release.yml` | GoReleaser pushes to `somaz94/homebrew-tap` and `somaz94/scoop-bucket`, which the built-in `GITHUB_TOKEN` cannot reach |
+| `GITLAB_TOKEN` | `gitlab-mirror.yml` | Optional; only needed if the GitLab mirror is wanted |
+
+`GITHUB_TOKEN` is provided automatically and needs no setup.

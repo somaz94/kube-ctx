@@ -5,6 +5,9 @@ set -euo pipefail
 # Usage: curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 
 REPO="somaz94/kube-ctx"
+# The release archive is named after the project, the binary inside it after
+# the command. They differ here: kube-ctx ships /usr/local/bin/kctx.
+PROJECT="kube-ctx"
 BINARY="kctx"
 INSTALL_DIR="/usr/local/bin"
 
@@ -52,23 +55,23 @@ main() {
   get_latest_version
   info "Latest version: v${VERSION}"
 
-  ARCHIVE="${BINARY}_${VERSION}_${OS}_${ARCH}.tar.gz"
+  ARCHIVE="${PROJECT}_${VERSION}_${OS}_${ARCH}.tar.gz"
   DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ARCHIVE}"
 
-  TMPDIR=$(mktemp -d)
-  trap 'rm -rf "$TMPDIR"' EXIT
+  TMP_DIR=$(mktemp -d)
+  trap 'rm -rf "$TMP_DIR"' EXIT
 
   info "Downloading ${ARCHIVE}..."
-  curl -sSL "$DOWNLOAD_URL" -o "${TMPDIR}/${ARCHIVE}" || fail "Download failed: ${DOWNLOAD_URL}"
+  curl -sSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${ARCHIVE}" || fail "Download failed: ${DOWNLOAD_URL}"
 
   info "Extracting..."
-  tar -xzf "${TMPDIR}/${ARCHIVE}" -C "$TMPDIR"
+  tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
 
   info "Installing to ${INSTALL_DIR}/${BINARY}..."
   if [ -w "$INSTALL_DIR" ]; then
-    mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
   else
-    sudo mv "${TMPDIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+    sudo mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
   fi
   chmod +x "${INSTALL_DIR}/${BINARY}"
 

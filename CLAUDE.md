@@ -37,7 +37,24 @@ pkg/shellenv/            Per-shell kubeconfig sessions and hook scripts
 pkg/paths/               XDG config / cache / state directory resolution
 pkg/render/              Color palette and ANSI-aware table alignment
 internal/testutil/       Kubeconfig fixtures for tests
+.goreleaser.yml          Multi-platform build + Homebrew tap + Scoop bucket
 ```
+
+<br/>
+
+## Release
+
+Push a `vX.Y.Z` tag; `release.yml` runs GoReleaser and the tap and bucket update
+themselves. Needs the `PAT_TOKEN` secret — the built-in `GITHUB_TOKEN` cannot
+push to `somaz94/homebrew-tap`.
+
+The archive is named after the **project** (`kube-ctx_0.1.0_darwin_arm64.tar.gz`)
+and the binary inside after the **command** (`kctx`). Anything that constructs a
+download URL has to keep the two apart; `scripts/install.sh` has a separate
+`PROJECT` and `BINARY` for exactly this reason.
+
+Do not edit `.goreleaser.yml`, `release.yml` or `changelog-generator.yml`
+without asking — they are the release pipeline.
 
 <br/>
 
