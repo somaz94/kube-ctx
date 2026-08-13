@@ -74,6 +74,12 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 			"production guards, a built-in fuzzy picker, and a cluster health check.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Bare "kctx" is the most common thing to type, so it does what
+		// "kctx ctx" does: open the picker, or list when there is no terminal.
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runCtx(a, nil, 0)
+		},
 	}
 	root.SetOut(out)
 	root.SetErr(errOut)

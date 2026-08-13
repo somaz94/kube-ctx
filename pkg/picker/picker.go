@@ -59,7 +59,7 @@ func NewTTY(prompt string) (*Picker, func() error, error) {
 	}
 	fd := int(tty.Fd())
 	if !term.IsTerminal(fd) {
-		tty.Close()
+		_ = tty.Close()
 		return nil, nil, ErrNoTTY
 	}
 

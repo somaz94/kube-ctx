@@ -236,3 +236,19 @@ func TestNewFailsWhenStateDirIsAFile(t *testing.T) {
 		t.Error("expected an error when the state directory cannot be created")
 	}
 }
+
+func TestSessionPathsWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+
+	cfg := testutil.Config(testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+	if _, err := New(cfg, "dev"); err == nil {
+		t.Error("New: expected an error with no resolvable state directory")
+	}
+	if err := GC(time.Hour); err == nil {
+		t.Error("GC: expected an error with no resolvable state directory")
+	}
+	if err := (&Session{ID: "x", Path: filepath.Join(t.TempDir(), "absent")}).Remove(); err == nil {
+		t.Error("Remove: expected an error with no resolvable state directory")
+	}
+}

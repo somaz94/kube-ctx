@@ -78,7 +78,7 @@ func TestRunSelectedContextsOnly(t *testing.T) {
 func TestRunUnreachableCluster(t *testing.T) {
 	cfg := testutil.Config(testutil.Spec{Contexts: []testutil.Ctx{{Name: "dev"}}})
 
-	got := stubProber("", errors.New("dial tcp 10.0.0.1:6443: i/o timeout\nsecond line"))
+	got := stubProber("", errors.New("dial tcp 192.0.2.10:6443: i/o timeout\nsecond line"))
 	results := got.Run(context.Background(), cfg, nil)
 
 	if results[0].Reachable {

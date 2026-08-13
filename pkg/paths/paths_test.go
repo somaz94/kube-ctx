@@ -75,3 +75,22 @@ func TestSanitizeName(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveWithoutHome(t *testing.T) {
+	// With no HOME and no XDG override there is nowhere to resolve to; every
+	// path function must surface that rather than return a bare "kube-ctx".
+	t.Setenv("HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+
+	for name, fn := range map[string]func() (string, error){
+		"ConfigDir": ConfigDir,
+		"CacheDir":  CacheDir,
+		"StateDir":  StateDir,
+	} {
+		if _, err := fn(); err == nil {
+			t.Errorf("%s: expected an error with no home directory", name)
+		}
+	}
+}

@@ -258,3 +258,68 @@ func TestRotateBackupsMissingRoot(t *testing.T) {
 		t.Error("expected an error for a missing backup root")
 	}
 }
+
+func TestPathOptionsIsExposed(t *testing.T) {
+	fixture(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+
+	l := New("")
+	if l.PathOptions() == nil {
+		t.Fatal("PathOptions returned nil")
+	}
+	if l.PathOptions().LoadingRules == nil {
+		t.Error("PathOptions has no loading rules")
+	}
+}
+
+func TestLoadRejectsMalformedKubeconfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config")
+	if err := os.WriteFile(path, []byte("clusters: [unclosed\n"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("KUBECONFIG", path)
+
+	if _, err := New("").Load(); err == nil {
+		t.Error("expected a parse error")
+	}
+}
+
+func TestSaveIntoUnwritableLocation(t *testing.T) {
+	files := fixture(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod"}},
+	})
+
+	l := New("")
+	cfg, err := l.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// clientcmd writes through a temporary file in the same directory, so a
+	// read-only directory is what actually blocks the write.
+	dir := filepath.Dir(files[0])
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	cfg.CurrentContext = "prod"
+	if err := l.Save(cfg); err == nil {
+		t.Error("expected a write error")
+	}
+}
+
+func TestBackupWithUnwritableStateDir(t *testing.T) {
+	dir := t.TempDir()
+	blocker := filepath.Join(dir, "kube-ctx")
+	if err := os.WriteFile(blocker, []byte("x"), filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	fixture(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+	t.Setenv("XDG_STATE_HOME", dir)
+
+	if err := New("").Backup(); err == nil {
+		t.Error("expected an error when the backup directory cannot be created")
+	}
+}

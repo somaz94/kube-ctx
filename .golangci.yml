@@ -1,0 +1,49 @@
+version: "2"
+
+run:
+  timeout: 5m
+  allow-parallel-runners: true
+
+# Only linters that report a real defect are enabled. Style-and-taste checks
+# (goconst, dupl, lll, gocyclo, prealloc) are deliberately left off: on these
+# repos they produce hundreds of findings and not one of them is a bug, which
+# would leave `make lint` permanently red and therefore ignored.
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unconvert
+    - unused
+  exclusions:
+    generated: lax
+    rules:
+      # Fixtures set up with os.WriteFile and friends discard errors by design;
+      # a failure there fails the test on the next line anyway.
+      - path: _test\.go
+        linters:
+          - errcheck
+      # QF checks are editor quickfix hints (e.g. "use Fprintf instead of
+      # WriteString(Sprintf)"), not defects.
+      - linters:
+          - staticcheck
+        text: "QF[0-9]+"
+  settings:
+    errcheck:
+      # Writing a report to stdout is the one place a failed write is neither
+      # actionable nor worth branching on; a broken pipe already ends the
+      # process. Errors from anything that can genuinely fail — marshalling,
+      # file and network writes — stay checked.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
