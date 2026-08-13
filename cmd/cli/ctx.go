@@ -86,6 +86,18 @@ func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int
 // switchContext points current-context at target, records the previous one, and
 // persists the change.
 func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
+	if !contexts.Exists(cfg, target) {
+		return fmt.Errorf("no context named %q", target)
+	}
+	ok, err := confirmGuard(a, target)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		_, err := fmt.Fprintln(a.out, "Aborted.")
+		return err
+	}
+
 	previous, err := contexts.Switch(cfg, target)
 	if err != nil {
 		return err
@@ -109,9 +121,49 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(a.out, "Switched to context %s (namespace %s).\n",
-		pal.Bold(target), pal.Cyan(namespace))
+	_, err = fmt.Fprintf(a.out, "Switched to context %s (namespace %s).%s\n",
+		pal.Bold(target), pal.Cyan(namespace), guardSuffix(a, target))
 	return err
+}
+
+// confirmGuard asks for confirmation when a guard rule demands it before
+// switching to a context.
+func confirmGuard(a *app, target string) (bool, error) {
+	classifier, err := a.classifier()
+	if err != nil {
+		return false, err
+	}
+	verdict := classifier.Classify(target)
+	if !verdict.Confirm {
+		return true, nil
+	}
+
+	pal := a.palette()
+	prompt := fmt.Sprintf("%s %s is classified %s by the guard rule %s.",
+		pal.Red("!"), pal.Bold(target), pal.Red(string(verdict.Level)), pal.Dim(verdict.Rule))
+	return confirmPhrase(a, prompt, target)
+}
+
+// guardSuffix renders the badge appended to the switch confirmation line.
+func guardSuffix(a *app, target string) string {
+	classifier, err := a.classifier()
+	if err != nil {
+		return ""
+	}
+	verdict := classifier.Classify(target)
+	if verdict.Label == "" {
+		return ""
+	}
+
+	pal := a.palette()
+	switch verdict.Style() {
+	case "danger":
+		return "  " + pal.Red(verdict.Label)
+	case "warn":
+		return "  " + pal.Yellow(verdict.Label)
+	default:
+		return "  " + pal.Dim(verdict.Label)
+	}
 }
 
 // printContextNames writes one context per line, marking the current one.

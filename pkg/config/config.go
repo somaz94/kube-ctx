@@ -45,6 +45,8 @@ type Guard struct {
 	Level Level `yaml:"level"`
 	// Confirm requires the user to retype the context name before switching.
 	Confirm bool `yaml:"confirm"`
+	// Label overrides the badge text shown next to a matching context.
+	Label string `yaml:"label,omitempty"`
 }
 
 // Config is the whole kube-ctx configuration file.

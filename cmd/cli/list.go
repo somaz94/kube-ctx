@@ -38,8 +38,13 @@ func runList(a *app, wide bool) error {
 		return json.NewEncoder(a.out).Encode(list)
 	}
 
+	classifier, err := a.classifier()
+	if err != nil {
+		return err
+	}
+
 	pal := a.palette()
-	headers := []string{"", "NAME", "NAMESPACE"}
+	headers := []string{"", "NAME", "NAMESPACE", "GUARD"}
 	if wide {
 		headers = append(headers, "CLUSTER", "USER", "SERVER")
 	}
@@ -52,7 +57,16 @@ func runList(a *app, wide bool) error {
 			marker = pal.Green("*")
 			name = pal.Bold(name)
 		}
-		row := []string{marker, name, c.Namespace}
+		verdict := classifier.Classify(c.Name)
+		badge := ""
+		switch verdict.Style() {
+		case "danger":
+			badge = pal.Red(verdict.Label)
+		case "warn":
+			badge = pal.Yellow(verdict.Label)
+		}
+
+		row := []string{marker, name, c.Namespace, badge}
 		if wide {
 			row = append(row, c.Cluster, c.User, c.Server)
 		}

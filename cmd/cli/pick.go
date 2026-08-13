@@ -42,11 +42,20 @@ func pickContext(a *app, cfg *clientcmdapi.Config) (string, error) {
 		return "", errPickerUnavailable
 	}
 
+	classifier, err := a.classifier()
+	if err != nil {
+		return "", err
+	}
+
 	items := make([]picker.Item, 0, len(list))
 	for _, c := range list {
 		item := picker.Item{Label: c.Name, Detail: c.Namespace}
+		if verdict := classifier.Classify(c.Name); verdict.Label != "" {
+			item.Badge = verdict.Label
+			item.BadgeStyle = verdict.Style()
+		}
 		if c.Current {
-			item.Badge = "current"
+			item.Detail = "current · " + item.Detail
 		}
 		items = append(items, item)
 	}

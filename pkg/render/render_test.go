@@ -157,6 +157,22 @@ func TestVisibleWidth(t *testing.T) {
 	}
 }
 
+func TestTableTrimsEmptyTrailingCells(t *testing.T) {
+	var buf bytes.Buffer
+	err := Table(&buf, []string{"NAME", "NOTES"}, [][]string{
+		{"dev", ""},
+		{"production", "unreachable"},
+	})
+	if err != nil {
+		t.Fatalf("Table: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n") {
+		if strings.HasSuffix(line, " ") {
+			t.Errorf("line has trailing whitespace: %q", line)
+		}
+	}
+}
+
 func TestTableRaggedRows(t *testing.T) {
 	var buf bytes.Buffer
 	// A row longer than the header must widen the table rather than panic.

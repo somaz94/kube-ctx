@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/somaz94/kube-ctx/pkg/config"
+	"github.com/somaz94/kube-ctx/pkg/guard"
 	"github.com/somaz94/kube-ctx/pkg/kubeconfig"
 	"github.com/somaz94/kube-ctx/pkg/render"
 )
@@ -52,6 +53,15 @@ func (a *app) userConfig() (*config.Config, error) {
 // jsonOutput reports whether the user asked for machine-readable output.
 func (a *app) jsonOutput() bool { return a.opts.output == "json" }
 
+// classifier compiles the guard rules from the user's config.
+func (a *app) classifier() (*guard.Classifier, error) {
+	userCfg, err := a.userConfig()
+	if err != nil {
+		return nil, err
+	}
+	return guard.New(userCfg.Guards)
+}
+
 // NewRootCmd builds the command tree writing to the given streams.
 func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 	a := &app{out: out, errOut: errOut, in: in}
@@ -81,6 +91,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newRenameCmd(a),
 		newDeleteCmd(a),
 		newAliasCmd(a),
+		newDoctorCmd(a),
 		newVersionCmd(a),
 	)
 	return root
@@ -113,7 +124,11 @@ func Execute() error {
 	root.SetArgs(normalizeArgs(os.Args[1:]))
 
 	if err := root.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		// A silent error carries an exit status only; the command already
+		// printed everything the user needs.
+		if err.Error() != "" {
+			fmt.Fprintln(os.Stderr, "Error:", err)
+		}
 		return err
 	}
 	return nil

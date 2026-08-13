@@ -126,14 +126,16 @@ func Table(w io.Writer, headers []string, rows [][]string) error {
 
 	var b strings.Builder
 	for _, row := range all {
+		var line strings.Builder
 		for i, cell := range row {
-			b.WriteString(cell)
-			// The last cell of a row is never padded, so no line carries
-			// trailing whitespace.
+			line.WriteString(cell)
 			if i < len(row)-1 {
-				b.WriteString(strings.Repeat(" ", widths[i]-VisibleWidth(cell)+2))
+				line.WriteString(strings.Repeat(" ", widths[i]-VisibleWidth(cell)+2))
 			}
 		}
+		// An empty trailing cell would otherwise leave the padding of the
+		// column before it dangling at the end of the line.
+		b.WriteString(strings.TrimRight(line.String(), " "))
 		b.WriteByte('\n')
 	}
 
