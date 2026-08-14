@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -212,5 +213,121 @@ func TestAliasList(t *testing.T) {
 	}
 	if len((&Config{}).AliasList()) != 0 {
 		t.Error("empty config should list no aliases")
+	}
+}
+
+// The generated file has to explain the one thing that is otherwise invisible:
+// that confirm exists and is off.
+func TestSaveWritesADocumentedHeader(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if err := cfg.SetAlias("p", "prod"); err != nil {
+		t.Fatalf("SetAlias: %v", err)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(data), "confirm: true") {
+		t.Errorf("header does not mention confirm:\n%s", data)
+	}
+	// Saving twice must not stack headers.
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	again, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if got := strings.Count(string(again), "# kube-ctx configuration."); got != 1 {
+		t.Errorf("header written %d times, want 1", got)
+	}
+	// And the file must still parse.
+	reloaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom after save: %v", err)
+	}
+	if reloaded.ResolveAlias("p") != "prod" {
+		t.Error("alias did not survive the round trip")
+	}
+}
+
+// Once the defaults have been substituted in they are indistinguishable from
+// configured rules, so the distinction has to be recorded at load time.
+func TestHasGuardsDistinguishesDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if cfg.HasGuards() {
+		t.Error("a missing file has no configured guards")
+	}
+
+	cfg.AddGuard(Guard{Contexts: []string{"cluster-7"}, Level: LevelDanger})
+	if !cfg.HasGuards() {
+		t.Error("AddGuard must mark the guards as configured")
+	}
+	// AddGuard prepends, so the new rule wins over the built-in patterns.
+	if got := cfg.Guards[0].Describe(); got != "cluster-7" {
+		t.Errorf("Guards[0] = %q, want the new rule first", got)
+	}
+	if len(cfg.Guards) != len(DefaultGuards())+1 {
+		t.Errorf("got %d guards, want the defaults plus one", len(cfg.Guards))
+	}
+}
+
+func TestRemoveGuard(t *testing.T) {
+	cfg := &Config{path: filepath.Join(t.TempDir(), "config.yaml")}
+	cfg.AddGuard(Guard{Contexts: []string{"cluster-7"}, Level: LevelDanger})
+
+	if _, err := cfg.RemoveGuard("abc"); err == nil {
+		t.Error("a non-numeric position must be rejected")
+	}
+	if _, err := cfg.RemoveGuard("0"); err == nil {
+		t.Error("position 0 must be rejected; the list is 1-based")
+	}
+	if _, err := cfg.RemoveGuard("99"); err == nil {
+		t.Error("a position past the end must be rejected")
+	}
+
+	before := len(cfg.Guards)
+	removed, err := cfg.RemoveGuard("1")
+	if err != nil {
+		t.Fatalf("RemoveGuard: %v", err)
+	}
+	if removed.Describe() != "cluster-7" {
+		t.Errorf("removed %q", removed.Describe())
+	}
+	if len(cfg.Guards) != before-1 {
+		t.Errorf("got %d guards, want %d", len(cfg.Guards), before-1)
+	}
+}
+
+func TestGuardDescribe(t *testing.T) {
+	tests := []struct {
+		guard Guard
+		want  string
+	}{
+		{Guard{Contexts: []string{"a", "b"}}, "a, b"},
+		{Guard{Prefix: "acme-"}, "acme-*"},
+		{Guard{Suffix: "-live"}, "*-live"},
+		{Guard{Match: "^x$"}, "^x$"},
+	}
+	for _, tt := range tests {
+		if got := tt.guard.Describe(); got != tt.want {
+			t.Errorf("Describe() = %q, want %q", got, tt.want)
+		}
 	}
 }

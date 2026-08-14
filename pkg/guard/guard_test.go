@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/somaz94/kube-ctx/pkg/config"
@@ -143,5 +144,87 @@ func TestDefaultLabelsAndStyles(t *testing.T) {
 		if v.Style() != tt.styl {
 			t.Errorf("Classify(%q).Style() = %q, want %q", tt.name, v.Style(), tt.styl)
 		}
+	}
+}
+
+// A rule may carry contexts, prefix or suffix instead of a regex — the names
+// that most need guarding are the ones no pattern over "prod" will find.
+func TestNonRegexMatchers(t *testing.T) {
+	tests := []struct {
+		name    string
+		guard   config.Guard
+		matches []string
+		misses  []string
+	}{
+		{
+			name:    "exact contexts",
+			guard:   config.Guard{Contexts: []string{"cluster-7", "acme-main"}, Level: config.LevelDanger},
+			matches: []string{"cluster-7", "acme-main"},
+			misses:  []string{"cluster-70", "acme", "dev"},
+		},
+		{
+			name:    "prefix",
+			guard:   config.Guard{Prefix: "acme-", Level: config.LevelDanger},
+			matches: []string{"acme-live", "acme-"},
+			misses:  []string{"my-acme-live", "acme"},
+		},
+		{
+			name:    "suffix",
+			guard:   config.Guard{Suffix: "-live", Level: config.LevelDanger},
+			matches: []string{"acme-live", "-live"},
+			misses:  []string{"live", "acme-live-2"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := New([]config.Guard{tt.guard})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			for _, name := range tt.matches {
+				if got := c.Classify(name); got.Level != config.LevelDanger {
+					t.Errorf("Classify(%q) = %q, want danger", name, got.Level)
+				}
+			}
+			for _, name := range tt.misses {
+				if got := c.Classify(name); got.Level != config.LevelSafe {
+					t.Errorf("Classify(%q) = %q, want safe", name, got.Level)
+				}
+			}
+		})
+	}
+}
+
+// A rule with no matcher must be rejected rather than matching everything: the
+// failure mode of the latter is a whole kubeconfig silently classified danger.
+func TestRuleWithoutAMatcherIsRejected(t *testing.T) {
+	_, err := New([]config.Guard{{Level: config.LevelDanger}})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "no matcher") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+// Two matchers on one rule is a typo. Honouring either one silently would
+// leave the user believing a context is guarded when it is not.
+func TestRuleWithTwoMatchersIsRejected(t *testing.T) {
+	_, err := New([]config.Guard{{Prefix: "a", Suffix: "b", Level: config.LevelDanger}})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if !strings.Contains(err.Error(), "more than one matcher") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestValidateHasNoPositionalPrefix(t *testing.T) {
+	err := Validate(config.Guard{Match: "[bad(", Level: config.LevelDanger})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if strings.HasPrefix(err.Error(), "guard ") {
+		t.Errorf("Validate should not number the rule: %v", err)
 	}
 }

@@ -46,7 +46,7 @@ type Classifier struct {
 }
 
 type rule struct {
-	re      *regexp.Regexp
+	matches func(string) bool
 	level   config.Level
 	confirm bool
 	label   string
@@ -58,25 +58,66 @@ type rule struct {
 func New(guards []config.Guard) (*Classifier, error) {
 	c := &Classifier{}
 	for i, g := range guards {
-		re, err := regexp.Compile(g.Match)
+		matches, err := compile(g)
 		if err != nil {
-			return nil, fmt.Errorf("guard %d has an invalid match pattern %q: %w", i+1, g.Match, err)
+			return nil, fmt.Errorf("guard %d: %w", i+1, err)
 		}
 		c.rules = append(c.rules, rule{
-			re:      re,
+			matches: matches,
 			level:   normalizeLevel(g.Level),
 			confirm: g.Confirm,
 			label:   labelFor(g),
-			source:  g.Match,
+			source:  g.Describe(),
 		})
 	}
 	return c, nil
 }
 
+// Validate reports whether a single rule is usable, without the positional
+// prefix New adds — the caller writing the rule already knows which one it is.
+func Validate(g config.Guard) error {
+	_, err := compile(g)
+	return err
+}
+
+// compile turns one rule's matcher into a predicate.
+//
+// A rule with no matcher is rejected rather than treated as match-everything:
+// the failure mode of the latter is every context in the kubeconfig suddenly
+// classified danger, from a rule the user thought was incomplete.
+func compile(g config.Guard) (func(string) bool, error) {
+	set := g.Matchers()
+	switch {
+	case len(set) == 0:
+		return nil, fmt.Errorf("has no matcher; set one of match, contexts, prefix or suffix")
+	case len(set) > 1:
+		return nil, fmt.Errorf("sets more than one matcher (%s); a rule may only have one", strings.Join(set, ", "))
+	}
+
+	switch set[0] {
+	case "contexts":
+		allowed := make(map[string]struct{}, len(g.Contexts))
+		for _, name := range g.Contexts {
+			allowed[name] = struct{}{}
+		}
+		return func(name string) bool { _, ok := allowed[name]; return ok }, nil
+	case "prefix":
+		return func(name string) bool { return strings.HasPrefix(name, g.Prefix) }, nil
+	case "suffix":
+		return func(name string) bool { return strings.HasSuffix(name, g.Suffix) }, nil
+	default:
+		re, err := regexp.Compile(g.Match)
+		if err != nil {
+			return nil, fmt.Errorf("invalid match pattern %q: %w", g.Match, err)
+		}
+		return re.MatchString, nil
+	}
+}
+
 // Classify returns the verdict for a context name.
 func (c *Classifier) Classify(name string) Verdict {
 	for _, r := range c.rules {
-		if r.re.MatchString(name) {
+		if r.matches(name) {
 			return Verdict{Level: r.level, Confirm: r.confirm, Label: r.label, Rule: r.source}
 		}
 	}
