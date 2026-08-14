@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased (2026-08-14)
+
+### Tests
+
+- add a kind-based e2e suite for the shell hook, doctor and guards ([40d1052](https://github.com/somaz94/kube-ctx/commit/40d10527556c62a3e0a6923a76b6b4cf289584c6))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.2.0](https://github.com/somaz94/kube-ctx/compare/v0.1.0...v0.2.0) (2026-08-14)
 
 ### Features
