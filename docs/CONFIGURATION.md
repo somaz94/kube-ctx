@@ -22,7 +22,7 @@ guards:
     level: warn
 ```
 
-The file is created and rewritten by `kctx alias`; you can also edit it by hand. It is written `0600`.
+The file is created and rewritten by `kctx alias` and `kctx guard`; you can also edit it by hand. It is written `0600`, with a header comment explaining the fields — comments you add yourself are not preserved across a rewrite.
 
 <br/>
 
@@ -39,13 +39,59 @@ A list of rules, tested against the context name in order — the first match wi
 | Field | Type | Description |
 |---|---|---|
 | `match` | regexp | Go regular expression tested against the context name |
+| `contexts` | list | Exact context names this rule applies to |
+| `prefix` | string | Matches context names starting with it |
+| `suffix` | string | Matches context names ending with it |
 | `level` | `safe` \| `warn` \| `danger` | How dangerous the context is |
 | `confirm` | bool | Require retyping the exact context name before switching |
 | `label` | string | Badge text; defaults to `DANGER` / `WARN` |
 
+A rule carries **exactly one** matcher. Two is an error rather than a precedence question: it is a typo, and silently honouring one of them is how a context nobody guarded ends up looking guarded. A rule with none is an error too — treating it as match-everything would classify a whole kubeconfig as production.
+
 An unrecognized `level` is treated as `safe`. A typo downgrades a rule rather than silently promoting a context to dangerous.
 
 The name is the only thing every cluster has in common — an EKS ARN, a kind cluster and a kubeadm context share no label or field that says "production" — which is why the rules match on it.
+
+But names lie. The cluster that would hurt most to break is often the one called `cluster-7`, and no pattern over `prod` will ever find it. That is what `contexts`, `prefix` and `suffix` are for: naming it takes no regex.
+
+```yaml
+guards:
+  # The real production cluster, whose name says nothing.
+  - contexts: [cluster-7, arn-eks-apne2-main]
+    level: danger
+    label: PROD
+    confirm: true
+  # A local convention the built-in patterns know nothing about.
+  - suffix: '-live'
+    level: danger
+    confirm: true
+```
+
+<br/>
+
+### Managing rules from the command line
+
+`kctx guard` writes these rules for you, so the config file never has to be opened:
+
+```console
+$ kctx guard add cluster-7 --confirm --label PROD
+Guard added: cluster-7 → danger (confirm)
+
+$ kctx guard add --suffix -live --level danger
+Guard added: *-live → danger
+
+$ kctx guard list
+#  MATCH                                      LEVEL   CONFIRM
+1  *-live                                     danger  no
+2  cluster-7                                  danger  yes
+3  (^|[-_.])(prod|prd|production)([-_.]|$)    danger  no
+4  (^|[-_.])(stg|stage|staging|uat)([-_.]|$)  warn    no
+
+$ kctx guard remove 1
+Removed guard *-live.
+```
+
+A new rule is **prepended**, so it wins over the built-in patterns. The first `add` also materializes the defaults into the file, which is where the `confirm: false` lines you can flip come from. An exact context name that matches nothing in the kubeconfig is rejected — a guard rule that silently covers nothing is worse than no rule at all.
 
 <br/>
 

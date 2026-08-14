@@ -24,7 +24,7 @@ make install         # Install to /usr/local/bin
 ```
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
-                         alias, doctor, shell, exec, init, version
+                         alias, guard, doctor, shell, exec, init, version
                          (+ util, pick, session helpers)
 pkg/kubeconfig/          clientcmd-backed load / save / backup
 pkg/contexts/            Context CRUD, switching, history stack
@@ -70,9 +70,12 @@ without asking — they are the release pipeline.
   namespace history is additionally scoped per context.
 - **Namespace cache** (`pkg/namespaces`) — a stale cache beats an empty list when
   the API server is unreachable; `Result.Source` says which was used.
-- **Guards** (`pkg/config`) — regex rules classify a context as
-  safe / warn / danger. Defaults classify and colorize but never block; the
-  user opts into `confirm: true`.
+- **Guards** (`pkg/config`) — rules classify a context as safe / warn / danger.
+  Defaults classify and colorize but never block; the user opts into
+  `confirm: true`. A rule carries exactly one matcher — `match` (regex),
+  `contexts` (exact names), `prefix` or `suffix`; zero or two is an error,
+  because a rule that matches everything or silently half-applies is worse than
+  none. `kctx guard` writes them, prepending so a new rule beats the defaults.
 - **Table alignment** (`pkg/render`) — column widths are measured with ANSI
   escapes stripped, so colorized cells still line up.
 - **Picker** (`pkg/picker`) — scoring, key decoding and the model are pure; the

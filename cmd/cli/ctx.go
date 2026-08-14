@@ -22,7 +22,17 @@ func newCtxCmd(a *app) *cobra.Command {
 		Long: "Switch the current context.\n\n" +
 			"With no argument an interactive picker opens; with \"-\" or \"-N\" the\n" +
 			"previous (or Nth previous) context is restored. Aliases defined in the\n" +
-			"kube-ctx config file are accepted anywhere a context name is.",
+			"kube-ctx config file are accepted anywhere a context name is.\n\n" +
+			"Contexts matching a guard rule are badged (DANGER for production, WARN\n" +
+			"for staging). Badging is all the defaults do — switching is never\n" +
+			"blocked. To make a production switch demand that you retype the context\n" +
+			"name, set confirm on the rule in ~/.config/kube-ctx/config.yaml\n" +
+			"($XDG_CONFIG_HOME/kube-ctx/config.yaml):\n\n" +
+			"  guards:\n" +
+			"    - match: '(^|[-_.])(prod|prd|production)([-_.]|$)'\n" +
+			"      level: danger\n" +
+			"      confirm: true\n\n" +
+			"-y skips the prompt, for scripts.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runCtx(a, args, back)

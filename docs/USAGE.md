@@ -101,6 +101,23 @@ An alias works anywhere a context name does — `kctx ctx p`, `kctx exec p -- ..
 
 <br/>
 
+## kctx guard
+
+```bash
+kctx guard list                                    # rules in effect, in order
+kctx guard add cluster-7 --confirm --label PROD    # this exact context
+kctx guard add --suffix -live --level danger       # a local naming convention
+kctx guard add --prefix acme- --level warn
+kctx guard add --match '^eks-.*-main$' --confirm   # regex, for anything else
+kctx guard remove 1                                # by its number in the list
+```
+
+The built-in rules classify by name — `prod`, `prd`, `production` as **danger**, `stg`, `staging`, `uat` as **warn** — and only badge; nothing is blocked until a rule sets `confirm`. `--confirm` makes switching to a matching context demand that you retype its full name, the same shape of speed bump as `terraform destroy`. `-y` skips it, for scripts.
+
+The reason `add` takes a plain context name is that the clusters most worth guarding are the ones the built-in patterns miss. A rule may carry only one matcher — a context list, a prefix, a suffix, or a regex — and new rules are prepended, so they win over the defaults.
+
+<br/>
+
 ## kctx doctor
 
 ```bash

@@ -111,6 +111,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx rename <old> <new>` | Rename a context (`.` = current) |
 | `kctx delete <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
+| `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
 | `kctx shell [context]` | Subshell pinned to a context |
 | `kctx exec <context> -- <cmd>` | Run one command against a context |
@@ -139,6 +140,14 @@ aliases:
 $ kctx ctx prod-eks-apne2
 ! prod-eks-apne2 is classified danger by the guard rule (^|[-_.])(prod|production)([-_.]|$).
 Type "prod-eks-apne2" to continue:
+```
+
+Names lie, though — the cluster that would hurt most to break is often the one called `cluster-7`. Name it directly, no regex and no editing:
+
+```bash
+kctx guard add cluster-7 --confirm --label PROD
+kctx guard add --suffix -live --level danger
+kctx guard list
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for every field.
