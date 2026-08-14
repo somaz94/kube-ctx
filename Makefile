@@ -1,6 +1,7 @@
-.PHONY: build clean test test-unit cover cover-html lint fmt vet install check-gh branch pr help
+.PHONY: build clean test test-unit test-e2e e2e e2e-cluster e2e-cluster-clean cover cover-html lint fmt vet install check-gh branch pr help
 
 APP_NAME=kctx
+E2E_CLUSTER?=kctx-e2e
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -20,6 +21,22 @@ test: test-unit ## Run unit tests (alias)
 
 test-unit: ## Run unit tests with coverage
 	go test ./... -v -race -cover
+
+## E2E
+
+# The suite needs a cluster that answers and a kubeconfig kubectl reads back.
+# It copies the current context into a throwaway workspace, so it never writes
+# to the caller's own kubeconfig.
+e2e: build ## Run the end-to-end suite against the current cluster
+	./scripts/e2e.sh
+
+test-e2e: e2e ## Run the end-to-end suite (alias)
+
+e2e-cluster: ## Create the kind cluster the e2e suite runs against
+	kind create cluster --name $(E2E_CLUSTER) --wait 60s
+
+e2e-cluster-clean: ## Delete the e2e kind cluster
+	kind delete cluster --name $(E2E_CLUSTER)
 
 ## Coverage
 
@@ -72,6 +89,6 @@ pr: check-gh ## Run tests, push, and create PR (usage: make pr title="Add featur
 ## Help
 
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 .DEFAULT_GOAL := help

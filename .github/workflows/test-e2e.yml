@@ -1,0 +1,74 @@
+name: E2E Tests
+
+on:
+  # Same trigger surface as ci.yml. Without the branch filter a topic branch
+  # would spin up a kind cluster on every push, and once a PR is open the push
+  # and pull_request events fire a second run each time — concurrency does not
+  # collapse them, since the two carry different refs.
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/**'
+      - '**/*.md'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-e2e:
+    name: E2E Suite
+    # Gate the kind-based e2e on fork PRs: push/dispatch and same-repo PRs
+    # always run; a fork PR runs only after a maintainer comments /ok-to-test
+    # (which applies the ok-to-test label).
+    if: >
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository ||
+      contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Build binary
+        run: make build
+
+      # The suite drives the shell hook through real processes, because that is
+      # the only place the bug it guards against can appear: exports written in
+      # the wrong shell's syntax fail to source, and kube-ctx still reports a
+      # successful switch. Missing shells are skipped, not failed, so fish being
+      # unavailable never turns the job red on its own.
+      - name: Install the shells the hook is generated for
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+          sudo apt-get install -y fish || echo "fish unavailable; the suite will skip it"
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Create kind cluster
+        run: make e2e-cluster
+
+      - name: Run e2e suite
+        run: make e2e
+
+      - name: Delete kind cluster
+        if: always()
+        run: make e2e-cluster-clean
