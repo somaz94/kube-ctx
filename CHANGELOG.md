@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file.
 
 ### Builds
 
+- **deps:** bump actions/setup-go from 6 to 7 (#4) ([#4](https://github.com/somaz94/kube-ctx/pull/4)) ([9ee5449](https://github.com/somaz94/kube-ctx/commit/9ee5449393a2619fe92b90960c2c1e4f34356d50))
 - **deps:** bump actions/checkout from 6 to 7 (#5) ([#5](https://github.com/somaz94/kube-ctx/pull/5)) ([dc95bf5](https://github.com/somaz94/kube-ctx/commit/dc95bf58a3b14e895b17ff082ec1dec4489cbbb0))
 - **deps:** bump golang.org/x/term in the go-mod-minor group (#1) ([#1](https://github.com/somaz94/kube-ctx/pull/1)) ([ee08a06](https://github.com/somaz94/kube-ctx/commit/ee08a06b3d7fe99bcd66bcdda61143add80429be))
 
