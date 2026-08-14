@@ -744,4 +744,9 @@ func TestPickerWithNoItemsFallsBack(t *testing.T) {
 	if h.stdout() != "" {
 		t.Errorf("stdout = %q, want nothing", h.stdout())
 	}
+	// Bare "kctx" on a machine with no kubeconfig yet must not look like a
+	// binary that silently did nothing.
+	if !strings.Contains(h.stderr(), "No contexts found") {
+		t.Errorf("stderr = %q, want an explanation", h.stderr())
+	}
 }

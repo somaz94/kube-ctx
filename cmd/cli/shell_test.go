@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/somaz94/kube-ctx/internal/testutil"
@@ -228,6 +229,27 @@ func TestExecPropagatesExitCode(t *testing.T) {
 	// The command's own status is what a caller scripting around kctx needs.
 	if code := ExitCode(err); code != 7 {
 		t.Errorf("ExitCode = %d, want 7", code)
+	}
+}
+
+// A child killed by a signal has no exit code of its own — ExitCode reports
+// -1, and exiting with that becomes 255, a status some other command could
+// legitimately have returned. Shells report 128+signal, so kctx does too.
+func TestExecReportsSignalDeathAsShellsDo(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	original := runCommand
+	runCommand = func(cmd *exec.Cmd) error {
+		return exec.Command("sh", "-c", "kill -TERM $$").Run()
+	}
+	t.Cleanup(func() { runCommand = original })
+
+	err := h.run("exec", "prod", "--", "sleep", "60")
+	if err == nil {
+		t.Fatal("expected a non-zero exit")
+	}
+	if code := ExitCode(err); code != 128+int(syscall.SIGTERM) {
+		t.Errorf("ExitCode = %d, want %d", code, 128+int(syscall.SIGTERM))
 	}
 }
 

@@ -130,7 +130,16 @@ func (p *Prober) Run(ctx context.Context, cfg *clientcmdapi.Config, names []stri
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			sem <- struct{}{}
+			// Waiting for a slot has to be cancellable too: on a large
+			// kubeconfig most contexts are queued here, not in flight, and an
+			// uncancellable acquire keeps the sweep going long after the caller
+			// gave up.
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				results[i] = Result{Context: name, Err: ctx.Err().Error()}
+				return
+			}
 			defer func() { <-sem }()
 			results[i] = p.probeOne(ctx, cfg, name, version, timeout)
 		}(i, name)
@@ -182,6 +191,14 @@ func (p *Prober) probeOne(ctx context.Context, cfg *clientcmdapi.Config, name st
 		return result // nothing to contact
 	}
 
+	// Prober is exported, so &Prober{} is a legal construction. Every other
+	// field defaults itself in Run; this one cannot, and a library should
+	// report that rather than nil-panic inside a goroutine.
+	if p.RestConfig == nil {
+		result.Issues = append(result.Issues, "prober has no RestConfig function")
+		return result
+	}
+
 	rc, err := p.RestConfig(name)
 	if err != nil {
 		result.Err = err.Error()
@@ -205,14 +222,26 @@ func (p *Prober) probeOne(ctx context.Context, cfg *clientcmdapi.Config, name st
 }
 
 // LiveVersion asks the API server for its version.
+//
+// The request is issued through the REST client rather than ServerVersion(),
+// which takes no context: with only rc.Timeout bounding it, a cancelled sweep
+// would keep talking to every unreachable cluster until each one timed out.
 func LiveVersion(ctx context.Context, rc *rest.Config) (string, error) {
 	client, err := discovery.NewDiscoveryClientForConfig(rc)
 	if err != nil {
 		return "", err
 	}
-	info, err := client.ServerVersion()
+	body, err := client.RESTClient().Get().AbsPath("/version").Do(ctx).Raw()
 	if err != nil {
 		return "", err
+	}
+	// Declared inline rather than as apimachinery's version.Info: gitVersion is
+	// the only field used, and "version" is already a name in this package.
+	var info struct {
+		GitVersion string `json:"gitVersion"`
+	}
+	if err := json.Unmarshal(body, &info); err != nil {
+		return "", fmt.Errorf("decode /version response: %w", err)
 	}
 	return info.GitVersion, nil
 }

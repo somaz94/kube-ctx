@@ -104,6 +104,48 @@ func TestRunRestConfigFailure(t *testing.T) {
 	}
 }
 
+// Prober is exported, so &Prober{} is a legal construction outside this
+// package. Every other field defaults itself in Run; a missing RestConfig must
+// surface as an issue rather than a nil panic inside a worker goroutine.
+func TestRunWithoutARestConfigFunc(t *testing.T) {
+	cfg := testutil.Config(testutil.Spec{Contexts: []testutil.Ctx{{Name: "dev"}}})
+
+	got := (&Prober{}).Run(context.Background(), cfg, nil)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want 1", len(got))
+	}
+	if len(got[0].Issues) == 0 || !strings.Contains(got[0].Issues[0], "RestConfig") {
+		t.Errorf("issues = %v, want one naming the missing function", got[0].Issues)
+	}
+}
+
+// A cancelled sweep must stop at the queue, not work through every remaining
+// context: with a concurrency limit most contexts are waiting for a slot.
+func TestRunStopsWhenTheContextIsCancelled(t *testing.T) {
+	specs := make([]testutil.Ctx, 0, 20)
+	for i := range 20 {
+		specs = append(specs, testutil.Ctx{Name: fmt.Sprintf("ctx-%02d", i)})
+	}
+	cfg := testutil.Config(testutil.Spec{Contexts: specs})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	got := stubProber("v1.31.4", nil).Run(ctx, cfg, nil)
+	if len(got) != len(specs) {
+		t.Fatalf("got %d results, want one per context", len(got))
+	}
+	var cancelled int
+	for _, r := range got {
+		if strings.Contains(r.Err, context.Canceled.Error()) {
+			cancelled++
+		}
+	}
+	if cancelled == 0 {
+		t.Error("no result reports the cancellation")
+	}
+}
+
 func TestRunDanglingReferences(t *testing.T) {
 	cfg := testutil.Config(testutil.Spec{Contexts: []testutil.Ctx{{Name: "dev"}}})
 	delete(cfg.Clusters, "dev-cluster")

@@ -183,8 +183,17 @@ func guardSuffix(a *app, target string) string {
 
 // printContextNames writes one context per line, marking the current one.
 func printContextNames(a *app, cfg *clientcmdapi.Config) error {
+	names := contexts.Names(cfg)
+	if len(names) == 0 {
+		// Bare "kctx" is the first thing a user types on a new machine.
+		// Printing nothing and exiting 0 reads as a broken binary; say what
+		// "kctx list" says.
+		_, err := fmt.Fprintln(a.errOut, "No contexts found in the kubeconfig.")
+		return err
+	}
+
 	pal := a.palette()
-	for _, name := range contexts.Names(cfg) {
+	for _, name := range names {
 		line := name
 		if name == cfg.CurrentContext {
 			line = pal.Bold(name)

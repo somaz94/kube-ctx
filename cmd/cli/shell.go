@@ -126,16 +126,39 @@ func runExec(a *app, target string, argv []string, namespace string) error {
 	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth())...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, a.out, a.errOut
 
-	if err := runCommand(cmd); err != nil {
+	// Ctrl-C reaches the whole foreground process group. Without this, dying
+	// alongside the child skips the deferred Remove and strands a copy of the
+	// merged kubeconfig — every cluster, token and cert — on disk until the GC
+	// sweep. "kctx exec prod -- kubectl logs -f" is interrupted routinely.
+	stop := ignoreInterrupts()
+	err = runCommand(cmd)
+	stop()
+
+	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			// Pass the command's own status through, unwrapped: "kctx exec ...
 			// kubectl get pods" must exit the way kubectl did.
-			return &exitError{code: exitErr.ExitCode()}
+			return &exitError{code: waitStatusCode(exitErr)}
 		}
 		return fmt.Errorf("run %s: %w", argv[0], err)
 	}
 	return nil
+}
+
+// waitStatusCode turns a child's wait status into an exit code.
+//
+// ExitCode reports -1 when the child was terminated by a signal, and exiting
+// with -1 becomes 255 — which is a real exit code some other command could
+// have returned. Shells report 128+signal for this, so kube-ctx does too.
+func waitStatusCode(exitErr *exec.ExitError) int {
+	if code := exitErr.ExitCode(); code >= 0 {
+		return code
+	}
+	if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+		return 128 + int(ws.Signal())
+	}
+	return 1
 }
 
 // sessionConfig resolves the requested context and returns a config pinned to
