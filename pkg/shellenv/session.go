@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -153,6 +154,79 @@ func (s *Session) Exports(sh Shell, depth int) string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// Info describes one session copy found on disk.
+type Info struct {
+	// ID identifies the session.
+	ID string `json:"id"`
+	// Path is the private kubeconfig.
+	Path string `json:"path"`
+	// Context is the context that copy is currently on, read back from it.
+	Context string `json:"context,omitempty"`
+	// LastUsed is when kube-ctx last ran in the session.
+	LastUsed time.Time `json:"lastUsed"`
+	// Current marks the session of the shell asking.
+	Current bool `json:"current"`
+}
+
+// List returns every session copy on disk, newest first.
+func List() ([]Info, error) {
+	dir, err := sessionsDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read session dir: %w", err)
+	}
+
+	current := os.Getenv(EnvShellID)
+	out := make([]Info, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		stat, err := entry.Info()
+		if err != nil {
+			continue // it went away while we were looking; that is fine
+		}
+		id := strings.TrimSuffix(entry.Name(), ".yaml")
+		path := filepath.Join(dir, entry.Name())
+
+		info := Info{ID: id, Path: path, LastUsed: stat.ModTime(), Current: id == current}
+		// Read back rather than remembered: the shell owning this copy switches
+		// context in it, and this file is the only record of where it ended up.
+		if cfg, err := clientcmd.LoadFromFile(path); err == nil {
+			info.Context = cfg.CurrentContext
+		}
+		out = append(out, info)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LastUsed.After(out[j].LastUsed) })
+	return out, nil
+}
+
+// Touch records that the current session is still in use.
+//
+// It is what makes an age-based sweep safe. Nothing rewrites a session copy
+// except a context switch, so a terminal left open for longer than the sweep
+// window without switching would have its kubeconfig deleted out from under it
+// — every later kubectl in that shell failing on a file that is no longer
+// there. Running kube-ctx at all is proof the shell is alive.
+func Touch() error {
+	if !Active() {
+		return nil
+	}
+	dir, err := sessionsDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, os.Getenv(EnvShellID)+".yaml")
+	now := time.Now()
+	return os.Chtimes(path, now, now)
 }
 
 // GC removes session kubeconfigs older than maxAge, along with their history.

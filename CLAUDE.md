@@ -29,7 +29,7 @@ make e2e-cluster-clean
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
                          import, export, alias, bind, guard, current, doctor,
-                         shell, exec, init, version
+                         shell, sessions, exec, init, version
                          (+ util, pick, session helpers)
 pkg/kubeconfig/          clientcmd-backed load / save / backup / encode
 pkg/transfer/            Merge and extract contexts between kubeconfigs
@@ -90,6 +90,14 @@ without asking — they are the release pipeline.
   removes every orphan the way `delete --prune` does. Scoping the removal too
   would make the note's own advice fail — by the time you re-run with `--prune`,
   the stanzas it named are no longer new.
+- **Session lifetime** (`pkg/shellenv`) — session copies are swept by age, and
+  the age is *time since last use*: `Touch` runs from the root command's
+  `PersistentPreRunE`, so any kube-ctx command in a session refreshes it.
+  Without that the sweep is a live bug rather than housekeeping — nothing else
+  rewrites a session copy except a context switch, so a terminal open past
+  `DefaultMaxAge` without switching would have its kubeconfig deleted while
+  `$KUBECONFIG` still pointed at it. `kctx sessions` surfaces the same list, and
+  never removes the caller's own copy.
 - **Directory bindings** (`cmd/cli/bind.go`) — `kctx bind` maps a directory to
   a context, and the shell hook runs `bind --apply` on every directory change.
   Three rules make it livable rather than bossy: it applies once per tree

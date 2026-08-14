@@ -16,7 +16,7 @@ func newDeleteCmd(a *app) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:     "delete <context>...",
-		Aliases: []string{"rm"},
+		Aliases: []string{"rm", "del"},
 		Short:   "Delete one or more contexts",
 		Long: "Delete one or more contexts.\n\n" +
 			"Passing \".\" deletes the current context. The cluster and user entries a\n" +

@@ -127,7 +127,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx current [-n]` | Print the current context (or namespace) and exit — for prompts |
 | `kctx list [--wide]` | Table of every context, with guard badges |
 | `kctx rename <old> <new>` | Rename a context (`.` = current) |
-| `kctx delete <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
+| `kctx delete\|rm\|del <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
 | `kctx import <file>... [--prune]` | Merge contexts from another kubeconfig, without colliding |
 | `kctx export [name]... [-f file]` | Write contexts out as a standalone kubeconfig |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
@@ -135,6 +135,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
 | `kctx shell [context]` | Subshell pinned to a context |
+| `kctx sessions [--clean]` | List the per-terminal kubeconfig copies, and tidy them |
 | `kctx exec <context> -- <cmd>` | Run one command against a context |
 | `kctx exec --all\|-c a,b -- <cmd>` | Run it against many contexts at once |
 | `kctx init bash\|zsh\|fish` | Shell hook + completions |
@@ -211,7 +212,7 @@ Exports are written `0600`, never overwrite a file without `--force`, and a `con
 | `$XDG_CONFIG_HOME/kube-ctx/config.yaml` | aliases, guard rules |
 | `$XDG_STATE_HOME/kube-ctx/history*` | context and namespace history |
 | `$XDG_STATE_HOME/kube-ctx/backups/` | kubeconfig snapshots, 10 generations |
-| `$XDG_STATE_HOME/kube-ctx/shells/` | per-terminal kubeconfig copies |
+| `$XDG_STATE_HOME/kube-ctx/shells/` | per-terminal kubeconfig copies (`kctx sessions`) |
 | `$XDG_CACHE_HOME/kube-ctx/namespaces/` | namespace list cache |
 
 Everything is created `0600`/`0700` — the copies hold credentials. Nothing is written to `~/.kube/` except the kubeconfig edit you asked for, and destructive edits are backed up first.

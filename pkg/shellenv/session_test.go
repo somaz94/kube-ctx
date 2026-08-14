@@ -252,3 +252,90 @@ func TestSessionPathsWithoutHome(t *testing.T) {
 		t.Error("Remove: expected an error with no resolvable state directory")
 	}
 }
+
+func TestListReportsSessions(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cfg := testutil.Config(testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod"}},
+	})
+
+	first, err := New(cfg, "dev")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	cfg.CurrentContext = "prod"
+	second, err := New(cfg, "prod")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Setenv(EnvShellID, second.ID)
+
+	list, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("sessions = %+v, want 2", list)
+	}
+
+	byID := map[string]Info{}
+	for _, info := range list {
+		byID[info.ID] = info
+	}
+	// The context is read back out of the copy, since the shell that owns it
+	// switches in there and the file is the only record of where it ended up.
+	if got := byID[second.ID]; got.Context != "prod" || !got.Current {
+		t.Errorf("second = %+v, want prod and current", got)
+	}
+	if got := byID[first.ID]; got.Context != "dev" || got.Current {
+		t.Errorf("first = %+v, want dev and not current", got)
+	}
+	if list[0].LastUsed.Before(list[1].LastUsed) {
+		t.Error("sessions should be newest first")
+	}
+}
+
+func TestListWithoutASessionDirectory(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	list, err := List()
+	if err != nil {
+		t.Fatalf("List on a fresh machine must not fail: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("sessions = %+v, want none", list)
+	}
+}
+
+// Nothing rewrites a session copy except a context switch, so without this a
+// terminal open longer than the sweep window loses its kubeconfig mid-use.
+func TestTouchKeepsALiveSessionFromBeingSwept(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	cfg := testutil.Config(testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+
+	session, err := New(cfg, "dev")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	stale := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(session.Path, stale, stale); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	// Outside a session there is nothing to touch, and the sweep takes it.
+	if err := Touch(); err != nil {
+		t.Fatalf("Touch outside a session: %v", err)
+	}
+
+	t.Setenv(EnvShellID, session.ID)
+	if err := Touch(); err != nil {
+		t.Fatalf("Touch: %v", err)
+	}
+	if err := GC(DefaultMaxAge); err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+	if _, err := os.Stat(session.Path); err != nil {
+		t.Errorf("a session in use was swept: %v", err)
+	}
+}

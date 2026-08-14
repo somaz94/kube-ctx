@@ -283,6 +283,29 @@ test -n "$KUBE_CTX_DEPTH"; and echo -n "[kctx:$KUBE_CTX_DEPTH] "
 
 <br/>
 
+## kctx sessions
+
+```bash
+kctx sessions                  # what is on disk
+kctx sessions --clean          # drop what nothing has used in a week
+kctx sessions --clean --all    # drop everything but this shell's
+```
+
+```
+   ID            CONTEXT      LAST USED
+*  a1b2c3d4e5f6  prod-eks     just now
+   9f8e7d6c5b4a  dev-kind     3h ago
+   112233445566  staging-eks  9d ago
+```
+
+Each row is a private kubeconfig copy — one per managed terminal, holding every cluster and credential your kubeconfig does. One is created the first time a hooked terminal switches context and removed when a `kctx shell` exits, but a terminal closed by killing the window leaves its copy behind. `*` marks this shell's own.
+
+**LAST USED is time since last use, not since creation.** Every kube-ctx command run inside a session refreshes it, so a terminal you have had open for a month is not mistaken for an abandoned one. That is what makes the sweep safe: nothing else rewrites a session copy, so without it a long-lived terminal would have its kubeconfig deleted out from under it and every later `kubectl` would fail on a file that is no longer there.
+
+`--clean` never removes the current shell's own copy, `--all` or not.
+
+<br/>
+
 ## kctx exec
 
 ```bash

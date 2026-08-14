@@ -633,6 +633,53 @@ check_edits() {
   assert_status 0 "the kubeconfig is still usable after the edits"
 }
 
+check_sessions() {
+  section "Session copies on disk"
+
+  # check_hook left one copy per shell behind, from terminals that are gone.
+  capture kctx sessions
+  assert_status 0 "sessions lists what is on disk"
+  if [ "$HOOK_SHELLS" -gt 0 ]; then
+    assert_contains "$LIVE" "... naming the context each copy is on"
+  fi
+
+  # Recently used, so nothing is swept even though no shell owns them.
+  capture kctx sessions --clean
+  assert_contains "Removed 0" "a recently used session is left alone"
+
+  local before after
+  before="$(session_count)"
+  if [ "$before" -gt 0 ]; then
+    # Age is time since last use, and a copy nothing has touched in a month is
+    # abandoned by any measure.
+    find "$XDG_STATE_HOME/kube-ctx/shells" -name '*.yaml' -exec touch -t 202001010000 {} +
+    capture kctx sessions --clean
+    assert_status 0 "sessions --clean removes the abandoned copies"
+    after="$(session_count)"
+    if [ "$after" -lt "$before" ]; then
+      pass "the copies are gone from disk ($before to $after)"
+    else
+      fail "the copies are gone from disk" "session count stayed at $before"
+    fi
+  else
+    skip "sessions --clean removes the abandoned copies" "no session copies were left behind"
+  fi
+
+  # A live session must survive --clean --all, because $KUBECONFIG in that very
+  # shell points at it.
+  local script="$WORK/sessions-live"
+  cat >"$script" <<EOF
+eval "\$(kctx init bash --no-completion)"
+kctx ctx $LIVE >/dev/null
+kctx sessions --clean --all >/dev/null
+echo "still-there=\$(test -f "\$KUBECONFIG" && echo yes || echo no)"
+echo "listed=\$(kctx sessions | grep -c "\$KUBE_CTX_SHELL_ID" || true)"
+EOF
+  capture bash --noprofile --norc -i <"$script"
+  assert_contains "still-there=yes" "--clean --all keeps the caller's own copy"
+  assert_contains "listed=1" "... and it is still listed"
+}
+
 check_fanout() {
   section "Running one command against many contexts"
 
@@ -753,6 +800,7 @@ main() {
   check_fanout
   check_edits
   check_transfer
+  check_sessions
 
   printf "\n${BOLD}%d passed, %d failed, %d skipped${RESET}\n" "$PASSED" "$FAILED" "$SKIPPED"
   if [ "$FAILED" -gt 0 ]; then

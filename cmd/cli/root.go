@@ -18,6 +18,7 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/guard"
 	"github.com/somaz94/kube-ctx/pkg/kubeconfig"
 	"github.com/somaz94/kube-ctx/pkg/render"
+	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
 // options holds the persistent flags of the root command.
@@ -100,6 +101,12 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		SilenceErrors: true,
 		// Runs for every subcommand, so no command has to remember to check.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Running at all is proof this shell is alive, which is what keeps
+			// the age-based sweep from deleting the kubeconfig out from under a
+			// terminal that has been open a long time without switching.
+			// Best-effort: a session that cannot be touched is not a reason to
+			// refuse the command.
+			_ = shellenv.Touch()
 			return validateOutput(a.opts.output)
 		},
 		// Bare "kctx" is the most common thing to type, so it does what
@@ -135,6 +142,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newGuardCmd(a),
 		newDoctorCmd(a),
 		newShellCmd(a),
+		newSessionsCmd(a),
 		newExecCmd(a),
 		newInitCmd(a),
 		newVersionCmd(a),
