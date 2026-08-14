@@ -101,6 +101,25 @@ An alias works anywhere a context name does — `kctx ctx p`, `kctx exec p -- ..
 
 <br/>
 
+## kctx current
+
+```bash
+kctx current            # the context name, nothing else
+kctx current -n         # its namespace instead
+kctx current -o json    # {"context": "...", "namespace": "..."}
+```
+
+Prints where you are and exits. Nothing is changed, no picker opens, and the output carries no badge or color — it is meant to be substituted straight into a shell prompt:
+
+```bash
+# bash / zsh
+PS1='[$(kctx current)] '"$PS1"
+```
+
+Inside a `kctx shell` or a hook-managed terminal this reports that terminal's context, which is the thing `kubectl config current-context` gets wrong when `$KUBECONFIG` is not honored. Exits non-zero when nothing is set, printing nothing, so a prompt degrades quietly.
+
+<br/>
+
 ## kctx guard
 
 ```bash
@@ -188,5 +207,12 @@ Prints a wrapper function plus completions. With the hook installed, a switch ap
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | An error, or `doctor` found an unhealthy context |
+| `1` | kube-ctx itself failed: unreadable kubeconfig, unknown context, bad guard rule |
+| `2` | `doctor` reached the clusters and some are unhealthy |
+| `130` | You declined a confirmation, or closed the picker |
 | _n_ | `exec` passes the wrapped command's status through |
+| `128+`_sig_ | `exec`'s command was killed by a signal, the way a shell reports it |
+
+`1` and `2` are separated on purpose: `kctx doctor prod || page-oncall` should fire when a cluster is sick, not when `--kubeconfig` was misspelled.
+
+So is `130`: `kctx ctx prod && ./deploy.sh` must not deploy when you declined the guard. Declining is not success, and it is not an error either — the shell's convention for "the user stopped this" is what it gets.

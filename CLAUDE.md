@@ -24,7 +24,8 @@ make install         # Install to /usr/local/bin
 ```
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
-                         alias, guard, doctor, shell, exec, init, version
+                         alias, guard, current, doctor, shell, exec, init,
+                         version
                          (+ util, pick, session helpers)
 pkg/kubeconfig/          clientcmd-backed load / save / backup
 pkg/contexts/            Context CRUD, switching, history stack
@@ -76,6 +77,21 @@ without asking — they are the release pipeline.
   `contexts` (exact names), `prefix` or `suffix`; zero or two is an error,
   because a rule that matches everything or silently half-applies is worse than
   none. `kctx guard` writes them, prepending so a new rule beats the defaults.
+  `confirm` gates every route to a cluster — `ctx`, `shell` and `exec` all call
+  `requireGuardConfirmation`; covering only `ctx` left `kctx exec prod -- ...`
+  walking straight past the guard.
+- **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
+  sick cluster, `130` the user declined. Distinct because the uses are shell
+  one-liners: `&&` must not proceed past a declined guard, and `||` must not
+  page on a typo'd `--kubeconfig`.
+- **One resolver** (`cmd/cli/util.go`) — every command taking a context name
+  goes through `resolveContext`: `.` expansion, alias, existence. Completion
+  offers aliases everywhere, so a command that skipped it would suggest inputs
+  it then rejects.
+- **Output seam** (`cmd/cli/util.go`) — `renderOutput` picks table or JSON so a
+  new command cannot accept `-o json` and ignore it. `-o plain` means
+  `--no-color`; an unknown `-o` is an error, never a fallback. JSON keys are
+  lowerCamel everywhere.
 - **Table alignment** (`pkg/render`) — column widths are measured with ANSI
   escapes stripped, so colorized cells still line up.
 - **Picker** (`pkg/picker`) — scoring, key decoding and the model are pure; the

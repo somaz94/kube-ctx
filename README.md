@@ -23,13 +23,13 @@
 | | `kubectx` + `kubens` | `kctx` |
 |---|---|---|
 | **Scope of a switch** | Global — every terminal follows | Per-terminal via the shell hook or `kctx shell`, global otherwise |
-| **Production guard** | None | Regex-classified contexts, colored, optionally confirm-to-switch |
+| **Production guard** | None | Contexts classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `shell` and `exec` alike |
 | **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency |
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
 | **Namespace list offline** | Fails when the API server is unreachable | Falls back to a cache and says so |
 | **Cluster health** | — | `kctx doctor`: reachability, version, expired certs and tokens |
 | **kubeconfig writes** | Re-emits the YAML | `clientcmd`, the same path `kubectl` uses — multi-file `$KUBECONFIG` safe |
-| **Backups** | — | Automatic before every destructive edit |
+| **Backups** | — | Automatic before every destructive kubeconfig edit |
 | **Binaries** | Two | One |
 
 <br/>
@@ -107,6 +107,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 |---|---|
 | `kctx ctx [name\|-\|-N]` | Switch context. No argument opens the picker; `-` goes back |
 | `kctx ns [name\|-\|-N]` | Switch the namespace of the current context |
+| `kctx current [-n]` | Print the current context (or namespace) and exit — for prompts |
 | `kctx list [--wide]` | Table of every context, with guard badges |
 | `kctx rename <old> <new>` | Rename a context (`.` = current) |
 | `kctx delete <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
@@ -118,13 +119,15 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx init bash\|zsh\|fish` | Shell hook + completions |
 | `kctx version` | Build information |
 
-Global flags: `--kubeconfig`, `-o color\|plain\|json`, `--no-color`, `-y/--yes`.
+Global flags: `--kubeconfig`, `-o color\|plain\|json`, `--no-color`, `-y/--yes`. An unknown `-o` value is an error rather than a silent fallback, so a script asking for `-o jsno` never gets a human table to parse.
+
+Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
 
 <br/>
 
 ## Production guards
 
-Contexts are classified by regular expression. Out of the box `prod`, `prd` and `production` are marked **DANGER**, `staging`/`uat` **WARN** — labels only, nothing blocks. Turn a rule into a real gate in `~/.config/kube-ctx/config.yaml`:
+Contexts are classified by name. Out of the box `prod`, `prd` and `production` are marked **DANGER**, `staging`/`uat` **WARN** — labels only, nothing blocks. Turn a rule into a real gate in `~/.config/kube-ctx/config.yaml`:
 
 ```yaml
 guards:
@@ -141,6 +144,8 @@ $ kctx ctx prod-eks-apne2
 ! prod-eks-apne2 is classified danger by the guard rule (^|[-_.])(prod|production)([-_.]|$).
 Type "prod-eks-apne2" to continue:
 ```
+
+The gate covers `kctx shell` and `kctx exec` too, not just switching — otherwise `kctx exec prod -- kubectl delete deploy/api` would walk straight past it. Declining exits `130`, so `kctx ctx prod && ./deploy.sh` does not deploy.
 
 Names lie, though — the cluster that would hurt most to break is often the one called `cluster-7`. Name it directly, no regex and no editing:
 

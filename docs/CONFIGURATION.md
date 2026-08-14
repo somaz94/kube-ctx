@@ -50,6 +50,8 @@ A rule carries **exactly one** matcher. Two is an error rather than a precedence
 
 An unrecognized `level` is treated as `safe`. A typo downgrades a rule rather than silently promoting a context to dangerous.
 
+`confirm` applies to **every** route to the cluster — `kctx ctx`, `kctx shell` and `kctx exec` — not just switching. A guard that only covered `ctx` would be walked straight past by `kctx exec prod -- kubectl delete deploy/api`, which is the more dangerous of the two. `kctx exec` also announces the guarded context it is about to run against. `-y` skips the prompt everywhere, for scripts, and declining exits `130` so `kctx ctx prod && ./deploy.sh` does not deploy.
+
 The name is the only thing every cluster has in common — an EKS ARN, a kind cluster and a kubeadm context share no label or field that says "production" — which is why the rules match on it.
 
 But names lie. The cluster that would hurt most to break is often the one called `cluster-7`, and no pattern over `prod` will ever find it. That is what `contexts`, `prefix` and `suffix` are for: naming it takes no regex.
