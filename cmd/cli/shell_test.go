@@ -462,6 +462,46 @@ func TestInitUnsupportedShell(t *testing.T) {
 	}
 }
 
+// TestInitNamesTheHookAfterTheInvocation covers the krew install shape: the
+// plugin is reachable only as kubectl-<plugin>, so a hook generated under any
+// other name defines a function the caller cannot call.
+func TestInitNamesTheHookAfterTheInvocation(t *testing.T) {
+	for _, name := range []string{"kctx", "kubectl-ctx2"} {
+		t.Run(name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			invokedName = func() string { return name }
+
+			if err := h.run("init", "bash", "--no-completion"); err != nil {
+				t.Fatalf("init: %v", err)
+			}
+			out := h.stdout()
+			if !strings.Contains(out, name+"() {") {
+				t.Errorf("hook does not define %s():\n%s", name, out)
+			}
+			if !strings.Contains(out, "command "+name+" \"$@\"") {
+				t.Errorf("hook does not call back through %s:\n%s", name, out)
+			}
+		})
+	}
+}
+
+// TestInvokedNameUsesArgv0 pins the argv[0] preference itself. os.Executable
+// resolves symlinks on Linux, which is what would break a krew install.
+func TestInvokedNameUsesArgv0(t *testing.T) {
+	original := os.Args
+	t.Cleanup(func() { os.Args = original })
+
+	os.Args = []string{"/home/user/.krew/bin/kubectl-ctx2", "init", "bash"}
+	if got := invokedName(); got != "kubectl-ctx2" {
+		t.Errorf("invokedName() = %q; want kubectl-ctx2", got)
+	}
+
+	os.Args = []string{""}
+	if got := invokedName(); got == "" {
+		t.Error("invokedName() fell through to an empty name")
+	}
+}
+
 // captureRunNoop stubs the spawner for tests that must never reach it.
 func captureRunNoop(t *testing.T) {
 	t.Helper()

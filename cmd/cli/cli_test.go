@@ -50,6 +50,13 @@ func newHarness(t *testing.T, spec testutil.Spec) *harness {
 	}
 	t.Cleanup(func() { newPicker = original })
 
+	// Under `go test` argv[0] is the test binary, so the hook would be
+	// generated for a function named after it. Pin the shipped name; tests
+	// about the name set it themselves.
+	originalName := invokedName
+	invokedName = func() string { return "kctx" }
+	t.Cleanup(func() { invokedName = originalName })
+
 	return &harness{t: t, kubeconfig: kubeconfig, in: strings.NewReader("")}
 }
 
