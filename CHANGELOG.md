@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased (2026-08-14)
 
+### Features
+
+- publish kctx as the ctx2 kubectl plugin via krew ([b15ac1a](https://github.com/somaz94/kube-ctx/commit/b15ac1ab240bb13fcb865511a8974e835bd1ba1f))
+
+### Bug Fixes
+
+- name the shell hook after the invocation, not the resolved binary ([7a3d07b](https://github.com/somaz94/kube-ctx/commit/7a3d07b845ec470c9b9e074a7656f7effa797080))
+
 ### Tests
 
 - add a kind-based e2e suite for the shell hook, doctor and guards ([40d1052](https://github.com/somaz94/kube-ctx/commit/40d10527556c62a3e0a6923a76b6b4cf289584c6))
