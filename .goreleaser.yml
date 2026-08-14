@@ -72,17 +72,39 @@ release:
   draft: false
   prerelease: auto
 
-brews:
-  - repository:
+# Homebrew. A cask rather than a formula: GoReleaser deprecated "brews" in
+# v2.10 and documents removal in v2.16 — latest is already past that and only
+# warns, which is not something to keep leaning on.
+#
+# Linux keeps working. Cask documentation is written for macOS and it is easy
+# to conclude otherwise, but a cask whose only artifact is a binary installs
+# fine on Linux: GoReleaser emits the on_linux URLs, and Homebrew's refusal is
+# conditioned on the artifact not being installable, not on the platform.
+# Verified by installing this cask from a tap under Homebrew 6.0.17 on
+# linux/arm64 — it linked kctx and ran.
+#
+# Existing users are carried over by tap_migrations.json in the tap repo:
+# Homebrew treats a formula and a cask of the same name as different things,
+# so without it "brew upgrade" would simply stop finding this.
+homebrew_casks:
+  - name: kube-ctx
+    binaries:
+      - kctx
+    directory: Casks
+    repository:
       owner: somaz94
       name: homebrew-tap
     homepage: "https://github.com/somaz94/kube-ctx"
     description: "Switch Kubernetes contexts and namespaces, per-terminal and with production guards"
-    license: "Apache-2.0"
-    install: |
-      bin.install "kctx"
-    test: |
-      system "#{bin}/kctx", "version"
+    hooks:
+      post:
+        # Homebrew quarantines cask downloads, and kctx is not signed or
+        # notarized, so without this macOS refuses to run it. Signing needs a
+        # paid Apple Developer account; until there is one, this is the trade.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/kctx"]
+          end
     caveats: |
       🎉 kctx installed!
 
