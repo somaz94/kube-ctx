@@ -67,6 +67,10 @@ brew install somaz94/tap/kube-ctx
 scoop bucket add somaz94 https://github.com/somaz94/scoop-bucket
 scoop install kube-ctx
 
+# krew (kubectl plugin)
+kubectl krew index add somaz94 https://github.com/somaz94/krew-index
+kubectl krew install somaz94/ctx2
+
 # Install script
 curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 
@@ -84,6 +88,12 @@ Then, for per-terminal isolation, one line in your rc file:
 ```bash
 eval "$(kctx init zsh)"     # bash: kctx init bash;  fish: kctx init fish | source
 ```
+
+> **On the krew install**, the binary is named `kubectl-ctx2`, and switching
+> through `kubectl ctx2 ctx ...` is always global — `kubectl` runs a plugin as
+> a subprocess, which cannot change the shell that called it. Install the hook
+> against `kubectl-ctx2` and call it directly for shell-local switching. See
+> [Deployment](docs/DEPLOYMENT.md#krew-kubectl-plugin).
 
 <br/>
 

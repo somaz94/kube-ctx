@@ -106,3 +106,39 @@ scoops:
     homepage: "https://github.com/somaz94/kube-ctx"
     description: "Switch Kubernetes contexts and namespaces, per-terminal and with production guards"
     license: "Apache-2.0"
+
+# kubectl plugin, published to the personal index alongside diff2 and events2.
+# "ctx" belongs to kubectx in the central index, hence the suffix.
+#
+# The caveats carry a limitation the other channels do not have: kubectl execs
+# a plugin as a subprocess, so a switch made through "kubectl ctx2" cannot be
+# shell-local and lands in the global kubeconfig instead. kube-ctx cannot even
+# warn about it — kubectl leaves no marker in the environment or argv, and it
+# execs rather than forks, so the parent process is the shell either way.
+krews:
+  - name: ctx2
+    repository:
+      owner: somaz94
+      name: krew-index
+    homepage: "https://github.com/somaz94/kube-ctx"
+    description: "Switch Kubernetes contexts and namespaces, per-terminal and with production guards"
+    short_description: "Per-terminal context switching with guards"
+    caveats: |
+      krew installs this as kubectl-ctx2.
+
+      Read-only commands work as you would expect:
+        kubectl ctx2 list
+        kubectl ctx2 doctor
+        kubectl ctx2 current
+
+      Switching does not. "kubectl ctx2 ctx prod" runs the plugin as a
+      subprocess of kubectl, which cannot change the shell that called it, so
+      the switch lands in the global kubeconfig and every terminal follows it.
+
+      For per-terminal isolation, install the hook and call the binary directly:
+
+        eval "$(kubectl-ctx2 init zsh)"   # bash: kubectl-ctx2 init bash
+                                          # fish: kubectl-ctx2 init fish | source
+        kubectl-ctx2 ctx prod
+
+      Docs: https://github.com/somaz94/kube-ctx

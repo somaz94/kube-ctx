@@ -26,6 +26,48 @@ The picker needs a terminal that understands ANSI escapes — Windows Terminal d
 
 <br/>
 
+### krew (kubectl plugin)
+
+```bash
+kubectl krew index add somaz94 https://github.com/somaz94/krew-index
+kubectl krew install somaz94/ctx2
+```
+
+The plugin is called `ctx2` because `ctx` in the central index belongs to
+kubectx. It is published to [somaz94/krew-index](https://github.com/somaz94/krew-index) by GoReleaser on every tag, next to `diff2` and `events2`.
+
+**Switching through `kubectl` is always global.** This is the one channel where
+kube-ctx cannot deliver its main feature, so it is worth being precise about:
+
+```bash
+kubectl ctx2 list          # fine
+kubectl ctx2 doctor        # fine
+kubectl ctx2 current       # fine
+
+kubectl ctx2 ctx prod      # switches the GLOBAL kubeconfig — every terminal follows
+```
+
+`kubectl` runs a plugin as a subprocess, and a subprocess cannot change the
+environment of the shell that called it. The shell hook is a function, and
+`kubectl` never consults it, so the switch falls back to the global write the
+hook exists to avoid. kube-ctx cannot warn you about it either: `kubectl`
+leaves no marker in the environment or in `argv`, and it `exec`s rather than
+forks, so even the parent process looks identical.
+
+For per-terminal isolation, install the hook and call the binary directly —
+krew puts it on your `$PATH` as `kubectl-ctx2`:
+
+```bash
+eval "$(kubectl-ctx2 init zsh)"    # bash: kubectl-ctx2 init bash
+                                   # fish: kubectl-ctx2 init fish | source
+kubectl-ctx2 ctx prod              # shell-local, as intended
+```
+
+If that name is a mouthful, `brew install somaz94/tap/kube-ctx` gives you the
+same binary as plain `kctx`. The two can be installed side by side.
+
+<br/>
+
 ### Install script
 
 ```bash
