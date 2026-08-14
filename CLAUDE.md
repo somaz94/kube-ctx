@@ -85,7 +85,15 @@ without asking — they are the release pipeline.
   than parsing stdout, because the picker draws on the same terminal. bash and
   zsh call the binary through the `command` builtin with an assignment prefix;
   fish uses `env`, since `env VAR=x command kctx` cannot work — `command` is a
-  builtin and env can only exec a real binary.
+  builtin and env can only exec a real binary. The hook also names its own
+  shell in `$KUBE_CTX_SHELL`: `$SHELL` is the login shell, so deriving the
+  syntax from it writes `set -gx` for a bash caller (or the reverse), which
+  sources with an error and silently loses the switch.
+- **Durable edits are refused in a session** — inside a managed shell
+  `$KUBECONFIG` is a copy that dies with the shell, so `rename` and `delete`
+  stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than reporting a
+  success that disappears on exit. Switching is meant to be shell-local; an
+  edit is not.
 
 <br/>
 

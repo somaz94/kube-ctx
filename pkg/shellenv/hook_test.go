@@ -106,6 +106,21 @@ func TestHookDefinesAWrapperFunction(t *testing.T) {
 	}
 }
 
+// The hook has to name its own shell, because the file it sources must be
+// written in that shell's syntax and $SHELL only names the login shell. A fish
+// user who never ran chsh, or a fish user running bash, would otherwise be
+// handed the other shell's syntax — and get a switch that reports success and
+// changes nothing.
+func TestHookNamesItsShell(t *testing.T) {
+	for _, sh := range Shells {
+		got := Hook(sh, "kctx")
+		want := EnvShell + "=" + string(sh)
+		if !strings.Contains(got, want) {
+			t.Errorf("%s hook does not pass %q:\n%s", sh, want, got)
+		}
+	}
+}
+
 func TestHookPreservesExitStatus(t *testing.T) {
 	for _, sh := range Shells {
 		got := Hook(sh, "kctx")

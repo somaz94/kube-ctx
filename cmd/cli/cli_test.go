@@ -396,6 +396,37 @@ func TestRenameBacksUpKubeconfig(t *testing.T) {
 	}
 }
 
+// Inside a kube-ctx-managed shell $KUBECONFIG is a private copy that is thrown
+// away when the shell exits. A rename or delete there would report success and
+// then leave with the copy, so both must refuse rather than quietly no-op.
+func TestDurableEditsRefuseInsideAManagedShell(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"rename", []string{"rename", "prod", "prod2"}},
+		{"delete", []string{"delete", "prod"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			t.Setenv(EnvShellID, "abc123")
+			h.stdin("y\n")
+
+			err := h.run(tt.args...)
+			if err == nil {
+				t.Fatalf("%s succeeded inside a managed shell", tt.name)
+			}
+			if !strings.Contains(err.Error(), "private kubeconfig copy") {
+				t.Errorf("error = %q, want it to explain the session copy", err)
+			}
+			if _, ok := h.config().Contexts["prod"]; !ok {
+				t.Error("the kubeconfig was edited anyway")
+			}
+		})
+	}
+}
+
 func TestDeleteRequiresConfirmation(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	h.stdin("n\n")

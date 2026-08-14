@@ -28,6 +28,10 @@ func newRenameCmd(a *app) *cobra.Command {
 
 // runRename applies the rename and persists it.
 func runRename(a *app, oldName, newName string) error {
+	if err := guardSessionScoped("rename"); err != nil {
+		return err
+	}
+
 	loader := a.loader()
 	cfg, err := loader.Load()
 	if err != nil {

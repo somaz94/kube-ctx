@@ -47,6 +47,10 @@ const (
 	EnvDepth = "KUBE_CTX_DEPTH"
 	// EnvFile is the path the shell hook asks kube-ctx to write exports to.
 	EnvFile = "KUBE_CTX_ENV_FILE"
+	// EnvShell names the shell the hook was generated for. $SHELL is the login
+	// shell, not the one running the hook, so it cannot decide the syntax of
+	// the file the hook is about to source.
+	EnvShell = "KUBE_CTX_SHELL"
 )
 
 // Session is one shell's private kubeconfig copy.

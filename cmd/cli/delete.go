@@ -36,6 +36,10 @@ func newDeleteCmd(a *app) *cobra.Command {
 
 // runDelete removes the named contexts after confirmation.
 func runDelete(a *app, names []string, pruneOrphans bool) error {
+	if err := guardSessionScoped("delete"); err != nil {
+		return err
+	}
+
 	loader := a.loader()
 	cfg, err := loader.Load()
 	if err != nil {

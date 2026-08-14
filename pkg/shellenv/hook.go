@@ -77,16 +77,20 @@ func Hook(sh Shell, binary string) string {
 
 // posixHook renders the bash and zsh wrapper.
 //
-// The variable is passed as an assignment prefix rather than through env(1):
+// The variables are passed as assignment prefixes rather than through env(1):
 // "command" is a shell builtin, and env can only exec a real binary, so
 // "env VAR=x command kctx" fails with "env: command: No such file".
+//
+// The shell name travels with the call because the file this function sources
+// has to be written in this shell's syntax, and only the hook knows which
+// shell that is.
 func posixHook(sh Shell, name string) string {
 	return fmt.Sprintf(`# kube-ctx shell hook (%[2]s)
 # Makes context and namespace switches local to this shell.
 %[1]s() {
   local __kctx_env __kctx_status
   __kctx_env="$(mktemp "${TMPDIR:-/tmp}/kube-ctx.XXXXXXXX")" || return 1
-  %[3]s="$__kctx_env" command %[1]s "$@"
+  %[3]s="$__kctx_env" %[4]s=%[2]s command %[1]s "$@"
   __kctx_status=$?
   if [ -s "$__kctx_env" ]; then
     . "$__kctx_env"
@@ -94,7 +98,7 @@ func posixHook(sh Shell, name string) string {
   rm -f "$__kctx_env"
   return $__kctx_status
 }
-`, name, sh, EnvFile)
+`, name, sh, EnvFile, EnvShell)
 }
 
 // fishHook renders the fish wrapper.
@@ -102,6 +106,10 @@ func posixHook(sh Shell, name string) string {
 // env(1) is used here rather than an assignment prefix because it also
 // bypasses the function being defined: env execs the binary found on PATH, so
 // the wrapper cannot call itself.
+//
+// The shell name travels with the call for the same reason as in posixHook:
+// $SHELL is the login shell, and a fish user who has not run chsh would
+// otherwise get bash syntax written into the file this function sources.
 func fishHook(name string) string {
 	return fmt.Sprintf(`# kube-ctx shell hook (fish)
 # Makes context and namespace switches local to this shell.
@@ -112,7 +120,7 @@ function %[1]s
     if test -z "$__kctx_env"
         return 1
     end
-    env %[2]s=$__kctx_env %[1]s $argv
+    env %[2]s=$__kctx_env %[3]s=fish %[1]s $argv
     set -l __kctx_status $status
     if test -s $__kctx_env
         source $__kctx_env
@@ -120,7 +128,7 @@ function %[1]s
     rm -f $__kctx_env
     return $__kctx_status
 end
-`, name, EnvFile)
+`, name, EnvFile, EnvShell)
 }
 
 // PromptHint returns a one-line snippet the user can paste to show the active
