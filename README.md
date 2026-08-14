@@ -1,6 +1,7 @@
 # kube-ctx
 
 [![CI](https://github.com/somaz94/kube-ctx/actions/workflows/ci.yml/badge.svg)](https://github.com/somaz94/kube-ctx/actions/workflows/ci.yml)
+[![E2E](https://github.com/somaz94/kube-ctx/actions/workflows/test-e2e.yml/badge.svg)](https://github.com/somaz94/kube-ctx/actions/workflows/test-e2e.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Latest Tag](https://img.shields.io/github/v/tag/somaz94/kube-ctx)](https://github.com/somaz94/kube-ctx/tags)
 [![Top Language](https://img.shields.io/github/languages/top/somaz94/kube-ctx)](https://github.com/somaz94/kube-ctx)

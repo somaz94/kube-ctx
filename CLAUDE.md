@@ -15,6 +15,10 @@ make cover-html      # Coverage in the browser
 make fmt             # go fmt
 make vet             # go vet
 make install         # Install to /usr/local/bin
+
+make e2e-cluster     # kind create cluster --name kctx-e2e
+make e2e             # ./scripts/e2e.sh, against a real API server
+make e2e-cluster-clean
 ```
 
 <br/>
@@ -132,3 +136,10 @@ without asking — they are the release pipeline.
   `internal/testutil` plus `t.Setenv` for `KUBECONFIG` and the XDG variables.
   `newHarness` (`cmd/cli/cli_test.go`) does all of it, and also stubs the picker
   and the process spawner — a test that reached `/dev/tty` would block forever.
+- The e2e suite (`scripts/e2e.sh`) covers what those stubs rule out: a
+  kubeconfig `kubectl` reads back, an API server that answers `doctor`, and real
+  bash / zsh / fish processes sourcing the hook — where a switch written in the
+  wrong shell's syntax silently fails to apply while still reporting success. It
+  copies one context into a throwaway workspace and redirects `$KUBECONFIG` and
+  the XDG variables there, so it never writes to the developer's kubeconfig
+  either. Checks that would open the picker are skipped when a terminal exists.

@@ -26,6 +26,44 @@ The suite is expected to stay at or above 90% overall, excluding `cmd/main.go`.
 
 <br/>
 
+## End-to-end tests
+
+```bash
+make e2e-cluster        # kind create cluster --name kctx-e2e
+make e2e                # ./scripts/e2e.sh
+make e2e-cluster-clean  # kind delete cluster --name kctx-e2e
+```
+
+Needs `kubectl`, `jq` and a cluster that answers; `zsh` and `fish` are used when
+installed and skipped when not. CI runs the same three commands against kind in
+`.github/workflows/test-e2e.yml`.
+
+The suite exists for the things the unit tests deliberately cannot reach: a
+kubeconfig on disk that `kubectl` reads back, an API server that answers
+`doctor` and the namespace list, and real bash / zsh / fish processes sourcing
+the shell hook. That last one is the reason it is worth the kind cluster —
+exports written in the wrong shell's syntax fail to source, leaving the switch
+silently undone while the command still reports success, and only a real shell
+shows it.
+
+It never writes to your kubeconfig. The one context it is pointed at
+(`$E2E_CONTEXT`, or the current one) is copied into a throwaway workspace, and
+`$KUBECONFIG` plus the three XDG variables are redirected there for the whole
+run. The copy still points at the real cluster, though, and the suite calls it —
+so a context the default guard rules would badge DANGER is refused outright:
+
+```bash
+E2E_CONTEXT=kind-kctx-e2e make e2e
+E2E_ALLOW_DANGER=1 make e2e  # override the production refusal
+KCTX_E2E_KEEP=1 make e2e     # keep the workspace to inspect after a failure
+```
+
+The no-argument `ctx` and `ns` checks are skipped when a terminal is present:
+those two open the picker on `/dev/tty`, which would block waiting for a
+keystroke. They run in CI, which has no terminal.
+
+<br/>
+
 ## Layout
 
 ```
