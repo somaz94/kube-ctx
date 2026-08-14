@@ -11,7 +11,22 @@ brew install somaz94/tap/kube-ctx
 brew upgrade somaz94/tap/kube-ctx
 ```
 
-The formula lives in [somaz94/homebrew-tap](https://github.com/somaz94/homebrew-tap) and is published by GoReleaser on every tag.
+The cask lives in [somaz94/homebrew-tap](https://github.com/somaz94/homebrew-tap) and is published by GoReleaser on every tag. It works on Linux too, despite cask documentation being written for macOS — a cask whose only artifact is a binary installs the same way there.
+
+<br/>
+
+#### Upgrading from the formula (one time)
+
+Releases up to and including v0.2.0 shipped a Homebrew **formula**; later ones ship a **cask**, because GoReleaser deprecated formula generation. Homebrew treats the two as different packages, so this does not happen on its own:
+
+```bash
+brew uninstall --formula kube-ctx
+brew install --cask somaz94/tap/kube-ctx
+```
+
+`brew upgrade` alone will not move you across, and installing the cask *without* uninstalling the formula first leaves both in place — Homebrew skips linking the cask's binary because the formula's is already at that path, so `kctx` silently keeps running the old version. `--formula` on the uninstall is deliberate: the bare name now resolves to the cask.
+
+Check which one you are on with `brew list --formula | grep kube-ctx` — no output means you are already on the cask.
 
 <br/>
 
