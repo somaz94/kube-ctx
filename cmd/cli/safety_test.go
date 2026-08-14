@@ -385,3 +385,52 @@ func TestCurrentFollowsTheActiveContext(t *testing.T) {
 		t.Errorf("stdout = %q, want prod's namespace", h.stdout())
 	}
 }
+
+// The value of "kctx shell" is invisible — the prompt renders identically,
+// because the session copy names the same context. Say so on the way in.
+func TestShellPointsAtThePromptVariables(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	t.Setenv("SHELL", "/bin/bash")
+	allowRun(t)
+
+	if err := h.run("shell", "dev"); err != nil {
+		t.Fatalf("shell: %v", err)
+	}
+	for _, want := range []string{EnvActive, "PS1"} {
+		if !strings.Contains(h.stderr(), want) {
+			t.Errorf("stderr = %q, want it to mention %s", h.stderr(), want)
+		}
+	}
+}
+
+// The snippet has to be in the syntax of the shell being entered; fish has no
+// PS1 to add to.
+func TestShellHintMatchesTheShell(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	t.Setenv("SHELL", "/opt/homebrew/bin/fish")
+	allowRun(t)
+
+	if err := h.run("shell", "dev"); err != nil {
+		t.Fatalf("shell: %v", err)
+	}
+	if !strings.Contains(h.stderr(), "fish_prompt") {
+		t.Errorf("stderr = %q, want the fish snippet", h.stderr())
+	}
+}
+
+// Nesting already proved the point, and a hint that repeats is one people
+// learn to skip.
+func TestShellHintDoesNotRepeatWhenNesting(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	t.Setenv("SHELL", "/bin/bash")
+	t.Setenv(EnvShellID, "outer")
+	t.Setenv("KUBE_CTX_DEPTH", "1")
+	allowRun(t)
+
+	if err := h.run("shell", "dev"); err != nil {
+		t.Fatalf("shell: %v", err)
+	}
+	if strings.Contains(h.stderr(), "PS1") {
+		t.Errorf("stderr = %q, want no repeated hint", h.stderr())
+	}
+}

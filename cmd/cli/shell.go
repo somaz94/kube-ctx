@@ -71,6 +71,7 @@ func runShell(a *app, args []string, namespace string) error {
 	pal := a.palette()
 	fmt.Fprintf(a.out, "Entering a shell pinned to %s (namespace %s). Type exit to leave.%s\n",
 		pal.Bold(target), pal.Cyan(namespaceOf(cfg, target)), guardSuffix(a, target))
+	hintPrompt(a, shellPath)
 
 	cmd := exec.Command(shellPath)
 	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth()+1)...)
@@ -179,6 +180,29 @@ func waitStatusCode(exitErr *exec.ExitError) int {
 		return 128 + int(ws.Signal())
 	}
 	return 1
+}
+
+// hintPrompt says how to make a managed shell visible in the prompt.
+//
+// The whole value of this command is that the shell is isolated, and nothing
+// about it shows: the prompt renders identically because the session copy
+// names the same context. kube-ctx exports the variables a prompt needs but
+// cannot install them — reaching into $PS1 would fight whatever theme the user
+// already runs — so it says where they are instead.
+//
+// Only on the way into the first managed shell. Nesting already proved the
+// point, and a hint that repeats is a hint people learn to skip.
+func hintPrompt(a *app, shellPath string) {
+	if shellenv.Depth() > 0 {
+		return
+	}
+	sh, err := shellenv.ParseShell("", shellPath)
+	if err != nil {
+		sh = shellenv.Bash
+	}
+	fmt.Fprintf(a.errOut, "Your prompt will look the same in here. %s\n%s\n",
+		a.palette().Dim("$"+EnvActive+" and $"+shellenv.EnvDepth+" are exported for it:"),
+		a.palette().Dim("  "+shellenv.PromptHint(sh)))
 }
 
 // sessionConfig resolves the requested context and returns a config pinned to

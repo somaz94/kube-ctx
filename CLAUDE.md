@@ -108,6 +108,11 @@ without asking — they are the release pipeline.
   shell in `$KUBE_CTX_SHELL`: `$SHELL` is the login shell, so deriving the
   syntax from it writes `set -gx` for a bash caller (or the reverse), which
   sources with an error and silently loses the switch.
+- **A managed shell is invisible by design** — the session copy names the same
+  context, so the prompt renders identically and `kube-ps1` and friends report
+  no change. kube-ctx exports `$KUBE_CTX_ACTIVE` / `$KUBE_CTX_DEPTH` and prints
+  the snippet on the way into the first one (`hintPrompt`), but never installs
+  it: rewriting `$PS1` would fight the user's own theme.
 - **Durable edits are refused in a session** — inside a managed shell
   `$KUBECONFIG` is a copy that dies with the shell, so `rename` and `delete`
   stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than reporting a

@@ -171,7 +171,23 @@ kctx shell                        # the current context
 
 Opens a subshell (`$SHELL`) whose `$KUBECONFIG` points at a private copy pinned to that context. The global kubeconfig is never written, so other terminals keep the context they were on. The copy is deleted when the shell exits.
 
-Inside the shell, `$KUBE_CTX_ACTIVE` names the context and `$KUBE_CTX_DEPTH` counts how many managed shells deep you are — both useful in a prompt.
+Inside the shell, `$KUBE_CTX_ACTIVE` names the context and `$KUBE_CTX_DEPTH` counts how many managed shells deep you are.
+
+**Your prompt will look exactly the same in there.** That surprises people, and it is not a bug: the session copy names the same context, so anything reading `current-context` — including `kube-ps1` — reports what it did before. kube-ctx exports the two variables a prompt needs but does not install them, because reaching into `$PS1` would fight whatever theme you already run. Entering the first managed shell prints the snippet for your shell; wiring it up once is enough:
+
+```bash
+# bash / zsh
+PS1='${KUBE_CTX_DEPTH:+[kctx:$KUBE_CTX_DEPTH] }'"$PS1"
+
+# already using kube-ps1? add the marker inside your wrapper — it reads an
+# exported variable, so nothing prints when kube-ctx is not involved
+[ -n "$KUBE_CTX_DEPTH" ] && printf '[kctx:%s]' "$KUBE_CTX_DEPTH"
+```
+
+```fish
+# fish
+test -n "$KUBE_CTX_DEPTH"; and echo -n "[kctx:$KUBE_CTX_DEPTH] "
+```
 
 <br/>
 
