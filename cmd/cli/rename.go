@@ -38,11 +38,9 @@ func runRename(a *app, oldName, newName string) error {
 		return err
 	}
 
-	if oldName == "." {
-		if cfg.CurrentContext == "" {
-			return fmt.Errorf("no current context to rename")
-		}
-		oldName = cfg.CurrentContext
+	oldName, err = resolveContext(a, cfg, oldName)
+	if err != nil {
+		return err
 	}
 	if err := contexts.Rename(cfg, oldName, newName); err != nil {
 		return err
