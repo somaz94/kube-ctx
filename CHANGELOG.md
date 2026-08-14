@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.0](https://github.com/somaz94/kube-ctx/compare/v0.3.0...v0.4.0) (2026-08-14)
+
+### Features
+
+- report and prune the stanzas kctx import leaves unreferenced ([d906bc8](https://github.com/somaz94/kube-ctx/commit/d906bc8b553366f569153452553a318243d087a7))
+- add kctx import and export, disambiguating colliding stanzas ([7eaf5e0](https://github.com/somaz94/kube-ctx/commit/7eaf5e09996ae4074456b421e641aa5947695cca))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.3.0](https://github.com/somaz94/kube-ctx/compare/v0.2.0...v0.3.0) (2026-08-14)
 
 ### Features
