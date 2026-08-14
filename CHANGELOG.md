@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.2.0](https://github.com/somaz94/kube-ctx/compare/v0.1.0...v0.2.0) (2026-08-14)
+
+### Features
+
+- point at the prompt variables when entering a managed shell ([65a375e](https://github.com/somaz94/kube-ctx/commit/65a375ec0a05769d628777d4ff902cca5b42f983))
+- add kctx current, JSON output for alias and guard, and missing completions ([9375192](https://github.com/somaz94/kube-ctx/commit/93751927b8f0de5b2c1ec3fea03d7fa57525b2ec))
+- classify contexts by exact name, prefix or suffix and manage rules with kctx guard ([eabb80e](https://github.com/somaz94/kube-ctx/commit/eabb80e48ded616cadb906571b9ae7170fc3a712))
+
+### Bug Fixes
+
+- guard every route to a cluster and make -o and exit codes contractual ([6412277](https://github.com/somaz94/kube-ctx/commit/6412277f5fa435f65e755951eb6eb36d69ea0ba3))
+- honor INSTALL_DIR and chmod as the user that moved the binary ([6952925](https://github.com/somaz94/kube-ctx/commit/6952925c04b5fd06113421f33470ff42a4c8a133))
+
+### Code Refactoring
+
+- route context names, history refs and output through one path ([e28ad1c](https://github.com/somaz94/kube-ctx/commit/e28ad1c2c7bbf31494cc9ab8fbdfe5daa12e0107))
+
+### Documentation
+
+- document current, the widened guard, exit codes and the output formats ([5eca6b1](https://github.com/somaz94/kube-ctx/commit/5eca6b1d2f41bba959d21ee6764e829f8cda0026))
+- surface the confirm opt-in in ctx help and the guard guides ([7ab0d3d](https://github.com/somaz94/kube-ctx/commit/7ab0d3dd6e0c48c7b82a3440a65943272f454bd0))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.1.0](https://github.com/somaz94/kube-ctx/releases/tag/v0.1.0) (2026-08-14)
 
 ### Features
