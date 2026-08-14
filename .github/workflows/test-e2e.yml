@@ -1,7 +1,12 @@
 name: E2E Tests
 
 on:
+  # Same trigger surface as ci.yml. Without the branch filter a topic branch
+  # would spin up a kind cluster on every push, and once a PR is open the push
+  # and pull_request events fire a second run each time — concurrency does not
+  # collapse them, since the two carry different refs.
   push:
+    branches: [main]
     paths-ignore:
       - '.github/workflows/**'
       - '**/*.md'
