@@ -51,7 +51,18 @@ const (
 	// shell, not the one running the hook, so it cannot decide the syntax of
 	// the file the hook is about to source.
 	EnvShell = "KUBE_CTX_SHELL"
+	// EnvBound records the directory binding this shell has already acted on,
+	// so entering a bound tree switches once rather than on every cd inside it
+	// — and so a deliberate switch made in there is not undone by the next cd.
+	EnvBound = "KUBE_CTX_BOUND"
+	// EnvPinned marks a shell opened by "kctx shell", which promised to stay on
+	// one context. Directory bindings do not apply inside one.
+	EnvPinned = "KUBE_CTX_PINNED"
 )
+
+// ExportLine renders one environment assignment in sh's syntax, for callers
+// that add a variable of their own to the file the hook sources.
+func ExportLine(sh Shell, key, value string) string { return exportLine(sh, key, value) }
 
 // Session is one shell's private kubeconfig copy.
 type Session struct {

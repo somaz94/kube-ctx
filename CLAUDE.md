@@ -28,14 +28,14 @@ make e2e-cluster-clean
 ```
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
-                         import, export, alias, guard, current, doctor, shell,
-                         exec, init, version
+                         import, export, alias, bind, guard, current, doctor,
+                         shell, exec, init, version
                          (+ util, pick, session helpers)
 pkg/kubeconfig/          clientcmd-backed load / save / backup / encode
 pkg/transfer/            Merge and extract contexts between kubeconfigs
 pkg/contexts/            Context CRUD, switching, history stack
 pkg/namespaces/          Namespace listing (live API + cache)
-pkg/config/              kube-ctx's own config.yaml: aliases, guard rules
+pkg/config/              kube-ctx's own config.yaml: aliases, guards, bindings
 pkg/guard/               Regex classification of contexts (safe/warn/danger)
 pkg/probe/               Parallel cluster health checks
 pkg/picker/              The interactive fuzzy selector
@@ -90,6 +90,16 @@ without asking — they are the release pipeline.
   removes every orphan the way `delete --prune` does. Scoping the removal too
   would make the note's own advice fail — by the time you re-run with `--prune`,
   the stanzas it named are no longer new.
+- **Directory bindings** (`cmd/cli/bind.go`) — `kctx bind` maps a directory to
+  a context, and the shell hook runs `bind --apply` on every directory change.
+  Three rules make it livable rather than bossy: it applies once per tree
+  (`$KUBE_CTX_BOUND` records what this shell already acted on, so `cd` deeper
+  does not undo a context picked by hand), it never switches back on the way
+  out, and it refuses to auto-enter a `confirm`-guarded context — a prompt on
+  every `cd` is unusable, and walking into a directory is not consent to be in
+  production. `kctx shell` exports `$KUBE_CTX_PINNED` to opt out entirely.
+  Binding paths are `EvalSymlinks`-resolved on both store and lookup; without
+  that, macOS's `/tmp` and `/var` alone would make bindings never match.
 - **Fan-out** (`cmd/cli/fanout.go`) — `exec --all` / `-c` runs one command
   against many contexts at once. The flag, not the number of contexts, decides
   the execution model: a positional context streams (stdin and both output

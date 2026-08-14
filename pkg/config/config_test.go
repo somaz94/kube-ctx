@@ -331,3 +331,108 @@ func TestGuardDescribe(t *testing.T) {
 		}
 	}
 }
+
+func TestBindings(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+
+	if err := cfg.SetBinding("/srv/api", "prod"); err != nil {
+		t.Fatalf("SetBinding: %v", err)
+	}
+	if err := cfg.SetBinding("/srv/api/docs/", "dev"); err != nil {
+		t.Fatalf("SetBinding: %v", err)
+	}
+
+	// The deepest binding wins however the map happens to be ordered, and a
+	// trailing slash names the same directory.
+	if target, at, ok := cfg.ResolveBinding("/srv/api/docs/guide"); !ok || target != "dev" || at != "/srv/api/docs" {
+		t.Errorf("ResolveBinding = %q at %q (ok=%v), want dev at /srv/api/docs", target, at, ok)
+	}
+	if target, _, ok := cfg.ResolveBinding("/srv/api/cmd"); !ok || target != "prod" {
+		t.Errorf("ResolveBinding = %q (ok=%v), want prod", target, ok)
+	}
+	// A directory that merely starts with the same letters is not inside it.
+	if _, _, ok := cfg.ResolveBinding("/srv/apiary"); ok {
+		t.Error("/srv/apiary must not inherit the binding on /srv/api")
+	}
+	if _, _, ok := cfg.ResolveBinding("/elsewhere"); ok {
+		t.Error("an unbound directory resolves to nothing")
+	}
+
+	if list := cfg.BindingList(); len(list) != 2 || list[0].Directory != "/srv/api" {
+		t.Errorf("BindingList = %+v, want sorted by directory", list)
+	}
+
+	if err := cfg.SetBinding("", "prod"); err == nil {
+		t.Error("an empty directory is an error")
+	}
+	if err := cfg.SetBinding("/srv/api", ""); err == nil {
+		t.Error("an empty context is an error")
+	}
+
+	// Only the binding recorded on exactly that directory is removed; the one a
+	// subdirectory inherits belongs to its ancestor.
+	if err := cfg.DeleteBinding("/srv/api/cmd"); err == nil {
+		t.Error("deleting an inherited binding must fail")
+	}
+	if err := cfg.DeleteBinding("/srv/api"); err != nil {
+		t.Fatalf("DeleteBinding: %v", err)
+	}
+	if _, _, ok := cfg.ResolveBinding("/srv/api/cmd"); ok {
+		t.Error("the binding survived its deletion")
+	}
+}
+
+func TestBindingsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if err := cfg.SetBinding("/srv/api", "prod"); err != nil {
+		t.Fatalf("SetBinding: %v", err)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reloaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if target, _, ok := reloaded.ResolveBinding("/srv/api"); !ok || target != "prod" {
+		t.Errorf("after reload ResolveBinding = %q (ok=%v)", target, ok)
+	}
+}
+
+// On macOS /tmp and /var are symlinks, and a checkout reached through one is
+// ordinary everywhere. Binding the path the user typed while looking up the
+// path the process reports would then never match.
+func TestBindingsResolveSymlinks(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	link := filepath.Join(root, "link")
+	if err := os.MkdirAll(filepath.Join(real, "sub"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	cfg, err := LoadFrom(filepath.Join(root, "config.yaml"))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if err := cfg.SetBinding(link, "prod"); err != nil {
+		t.Fatalf("SetBinding: %v", err)
+	}
+
+	for _, dir := range []string{real, filepath.Join(real, "sub"), link} {
+		if target, _, ok := cfg.ResolveBinding(dir); !ok || target != "prod" {
+			t.Errorf("ResolveBinding(%s) = %q (ok=%v), want prod", dir, target, ok)
+		}
+	}
+}

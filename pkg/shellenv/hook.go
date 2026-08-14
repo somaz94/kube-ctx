@@ -98,7 +98,44 @@ func posixHook(sh Shell, name string) string {
   rm -f "$__kctx_env"
   return $__kctx_status
 }
-`, name, sh, EnvFile, EnvShell)
+
+# Applies directory bindings (kctx bind) when the working directory changes.
+__kctx_chpwd() {
+  %[1]s bind --apply
+}
+%[5]s
+# Bindings are resolved once for the directory the shell starts in, since a
+# terminal opened inside a bound repository never fires a change event.
+__kctx_chpwd
+`, name, sh, EnvFile, EnvShell, chpwdInstall(sh))
+}
+
+// chpwdInstall renders the shell-specific way of running __kctx_chpwd on a
+// directory change.
+//
+// zsh has a first-class hook for it. bash has none, so PROMPT_COMMAND stands in
+// — it fires before every prompt rather than on every cd, which is why the
+// function compares $PWD itself. Appending is guarded because sourcing the hook
+// twice (a nested shell, a re-sourced rc file) would otherwise run it twice per
+// prompt.
+func chpwdInstall(sh Shell) string {
+	if sh == Zsh {
+		return `typeset -ag chpwd_functions
+if [[ -z ${chpwd_functions[(r)__kctx_chpwd]} ]]; then
+  chpwd_functions+=(__kctx_chpwd)
+fi`
+	}
+	return `__kctx_last_pwd="$PWD"
+__kctx_prompt_command() {
+  if [ "$PWD" != "$__kctx_last_pwd" ]; then
+    __kctx_last_pwd="$PWD"
+    __kctx_chpwd
+  fi
+}
+case "${PROMPT_COMMAND:-}" in
+  *__kctx_prompt_command*) ;;
+  *) PROMPT_COMMAND="__kctx_prompt_command${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+esac`
 }
 
 // fishHook renders the fish wrapper.
@@ -128,6 +165,14 @@ function %[1]s
     rm -f $__kctx_env
     return $__kctx_status
 end
+
+# Applies directory bindings (kctx bind) when the working directory changes.
+# fish has no chpwd hook; watching $PWD is the documented equivalent, and it
+# fires once for the directory the shell starts in as well.
+function __kctx_chpwd --on-variable PWD
+    %[1]s bind --apply
+end
+__kctx_chpwd
 `, name, EnvFile, EnvShell)
 }
 

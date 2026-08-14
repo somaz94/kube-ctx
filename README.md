@@ -25,6 +25,7 @@
 |---|---|---|
 | **Scope of a switch** | Global — every terminal follows | Per-terminal via the shell hook or `kctx shell`, global otherwise |
 | **Production guard** | None | Contexts classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `shell` and `exec` alike |
+| **Context per project** | — | `kctx bind`: `cd` into a repo, this terminal follows |
 | **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency |
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
 | **The same question, every cluster** | A `for` loop that switches and hopes | `kctx exec --all -- kubectl get nodes`, in parallel |
@@ -111,6 +112,7 @@ kctx list --wide                 # everything at a glance
 kctx doctor                      # what still works?
 kctx exec prod-eks -- kubectl get nodes    # one command, no switch
 kctx exec --all -- kubectl get nodes       # every cluster, in parallel
+kctx bind dev                    # cd here later, and this terminal follows
 kctx shell prod-eks              # a subshell pinned to prod
 ```
 
@@ -129,6 +131,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx import <file>... [--prune]` | Merge contexts from another kubeconfig, without colliding |
 | `kctx export [name]... [-f file]` | Write contexts out as a standalone kubeconfig |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
+| `kctx bind [context]` | Bind a directory to a context; `cd` there switches |
 | `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
 | `kctx shell [context]` | Subshell pinned to a context |

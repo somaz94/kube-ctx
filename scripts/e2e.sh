@@ -437,6 +437,105 @@ check_hook() {
   fi
 }
 
+# bind_probe runs a real shell that installs the hook, walks through bound and
+# unbound directories, and reports the context after each move.
+#
+# bash is run interactively with the script on stdin, and that is not incidental:
+# it has no directory-change hook, so the binding is applied from PROMPT_COMMAND,
+# which only runs when a prompt is drawn. A non-interactive "bash script" would
+# report that bindings do not work at all.
+bind_probe() {
+  local sh="$1"
+  local script="$WORK/bind-$sh"
+
+  if [ "$sh" = "fish" ]; then
+    cat >"$script" <<EOF
+kctx init fish --no-completion | source
+cd $WORK/bind-a
+echo "at-a="(kubectl config current-context)
+cd $WORK/bind-a/sub
+echo "at-sub="(kubectl config current-context)
+kctx ctx $LIVE >/dev/null
+cd $WORK/bind-a
+echo "after-manual="(kubectl config current-context)
+cd $WORK/bind-b
+echo "at-b="(kubectl config current-context)
+cd $WORK
+echo "outside="(kubectl config current-context)
+EOF
+    capture fish <"$script"
+    return
+  fi
+
+  cat >"$script" <<EOF
+eval "\$(kctx init $sh --no-completion)"
+cd $WORK/bind-a
+echo "at-a=\$(kubectl config current-context)"
+cd $WORK/bind-a/sub
+echo "at-sub=\$(kubectl config current-context)"
+kctx ctx $LIVE >/dev/null
+cd $WORK/bind-a
+echo "after-manual=\$(kubectl config current-context)"
+cd $WORK/bind-b
+echo "at-b=\$(kubectl config current-context)"
+cd $WORK
+echo "outside=\$(kubectl config current-context)"
+EOF
+
+  if [ "$sh" = "zsh" ]; then
+    capture zsh -f -i <"$script"
+  else
+    capture bash --noprofile --norc -i <"$script"
+  fi
+}
+
+check_bind() {
+  section "Directory bindings, in real bash, zsh and fish"
+
+  mkdir -p "$WORK/bind-a/sub" "$WORK/bind-b"
+  capture kctx bind --path "$WORK/bind-a" "$STAGING"
+  assert_status 0 "bind records a directory"
+  capture kctx bind --path "$WORK/bind-b" "$PROD"
+  assert_status 0 "... and a second one"
+
+  local sh
+  for sh in bash zsh fish; do
+    if ! command -v "$sh" >/dev/null 2>&1; then
+      skip "$sh applies directory bindings" "$sh is not installed"
+      continue
+    fi
+
+    bind_probe "$sh"
+    assert_contains "at-a=$STAGING" "$sh: entering a bound directory switches"
+    assert_contains "at-sub=$STAGING" "$sh: moving deeper does not switch again"
+    # The binding fires once per tree, so a context chosen by hand inside it is
+    # not undone by the next cd.
+    assert_contains "after-manual=$LIVE" "$sh: a manual switch inside the tree survives"
+    assert_contains "at-b=$PROD" "$sh: a different binding applies on entering it"
+    # A binding chooses a context; it does not own the shell.
+    assert_contains "outside=$PROD" "$sh: leaving a bound directory does not switch back"
+    assert_eq "$LIVE" "$(current_context)" "$sh: the global kubeconfig is untouched"
+  done
+
+  # Walking into a directory is not consent to be in production, and a prompt on
+  # every cd would be unusable — so a confirm-guarded context is named, not
+  # entered.
+  capture kctx guard add "$PROD" --confirm
+  assert_status 0 "a confirm rule is added for the bound production context"
+  if command -v bash >/dev/null 2>&1; then
+    bind_probe bash
+    assert_contains "guarded" "the guarded binding is refused out loud"
+    assert_not_contains "at-b=$PROD" "... and not entered"
+  fi
+  capture kctx guard remove 1
+  assert_status 0 "the confirm rule is removed again"
+
+  capture kctx bind --delete --path "$WORK/bind-a"
+  assert_status 0 "bind --delete removes a binding"
+  capture kctx bind --delete --path "$WORK/bind-b"
+  assert_status 0 "... and the other one"
+}
+
 check_guard() {
   section "Guards, on every route to a cluster"
 
@@ -650,6 +749,7 @@ main() {
   check_hook
   check_guard
   check_alias
+  check_bind
   check_fanout
   check_edits
   check_transfer

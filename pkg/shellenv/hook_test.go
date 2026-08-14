@@ -178,3 +178,41 @@ func TestPromptHint(t *testing.T) {
 		}
 	}
 }
+
+// The hook has to run the binding check on a directory change, and each shell
+// spells that differently — zsh has chpwd_functions, fish watches $PWD, and
+// bash has neither, so it compares $PWD from PROMPT_COMMAND.
+func TestHookWiresUpDirectoryChanges(t *testing.T) {
+	tests := []struct {
+		sh    Shell
+		wants []string
+	}{
+		{Bash, []string{"PROMPT_COMMAND", "__kctx_last_pwd", "bind --apply"}},
+		{Zsh, []string{"chpwd_functions", "bind --apply"}},
+		{Fish, []string{"--on-variable PWD", "bind --apply"}},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.sh), func(t *testing.T) {
+			hook := Hook(tt.sh, "kctx")
+			for _, want := range tt.wants {
+				if !strings.Contains(hook, want) {
+					t.Errorf("hook missing %q:\n%s", want, hook)
+				}
+			}
+			// A terminal opened inside a bound directory never fires a change
+			// event, so the hook resolves the starting directory itself.
+			if !strings.HasSuffix(strings.TrimSpace(hook), "__kctx_chpwd") {
+				t.Errorf("hook does not run once on install:\n%s", hook)
+			}
+		})
+	}
+}
+
+func TestExportLineIsShellSpecific(t *testing.T) {
+	if got := ExportLine(Bash, "K", "v"); got != "export K='v'" {
+		t.Errorf("ExportLine(bash) = %q", got)
+	}
+	if got := ExportLine(Fish, "K", "v"); got != "set -gx K 'v'" {
+		t.Errorf("ExportLine(fish) = %q", got)
+	}
+}

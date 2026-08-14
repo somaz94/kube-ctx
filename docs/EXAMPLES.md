@@ -182,6 +182,35 @@ Without `--flatten` the export still names certificate paths from this machine â
 
 <br/>
 
+## A context per repository
+
+```bash
+$ cd ~/work/payments && kctx bind staging-eks
+Bound /home/u/work/payments to staging-eks.  WARN
+
+$ cd ~/work/api && kctx bind dev
+Bound /home/u/work/api to dev.
+
+$ cd ~/work/payments
+Switched to context staging-eks (namespace default).  WARN
+
+$ cd cmd/server          # deeper in the same repo: nothing happens
+$ kctx ctx dev           # and a choice made by hand sticks
+$ cd ..                  # still dev
+
+$ cd ~/work/api
+Switched to context dev (namespace default).
+
+$ kctx bind
+DIRECTORY               CONTEXT
+/home/u/work/api        dev
+/home/u/work/payments   staging-eks
+```
+
+Only the terminal that moved switches. Binding a context guarded with `confirm` is allowed, but entering the directory will not switch to it â€” kube-ctx names it and leaves you where you were.
+
+<br/>
+
 ## Short names
 
 ```bash

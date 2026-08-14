@@ -75,7 +75,9 @@ func runShell(a *app, args []string, namespace string) error {
 	hintPrompt(a, shellPath)
 
 	cmd := exec.Command(shellPath)
-	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth()+1)...)
+	// Pinned: this shell asked for one context and is entitled to keep it, so a
+	// directory binding must not switch it out from under the user on a cd.
+	cmd.Env = append(os.Environ(), append(session.Env(shellenv.Depth()+1), shellenv.EnvPinned+"=1")...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 	// The child owns the terminal while it runs. Ctrl-C reaches the whole

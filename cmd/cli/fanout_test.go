@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -269,5 +270,22 @@ func TestDedupeKeepsTheFirstOccurrence(t *testing.T) {
 	}
 	if got := dedupe(nil); len(got) != 0 {
 		t.Errorf("dedupe(nil) = %v, want empty", got)
+	}
+}
+
+// A command that cannot be started at all is kube-ctx failing, not the command
+// returning non-zero, and the two read differently in the report.
+func TestExecFanoutReportsASpawnFailure(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	fanoutRun(t, func(string, io.Writer, io.Writer) error {
+		return errors.New("no such file or directory")
+	})
+
+	err := h.run("exec", "-c", "dev", "--", "definitely-not-a-command")
+	if code := ExitCode(err); code != ExitFailure {
+		t.Errorf("ExitCode = %d, want %d", code, ExitFailure)
+	}
+	if !strings.Contains(h.stderr(), "no such file or directory") {
+		t.Errorf("stderr = %q, want the reason", h.stderr())
 	}
 }

@@ -131,6 +131,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newImportCmd(a),
 		newExportCmd(a),
 		newAliasCmd(a),
+		newBindCmd(a),
 		newGuardCmd(a),
 		newDoctorCmd(a),
 		newShellCmd(a),

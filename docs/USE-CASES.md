@@ -36,6 +36,14 @@ Situations kube-ctx was built for, and what it does about them.
 
 <br/>
 
+## The repository whose cluster you keep forgetting
+
+**The problem.** Three checkouts, three clusters. The mistake is not forgetting which — it is remembering wrong: you `cd` into the payments repo, run `kubectl rollout restart`, and find out afterwards that the terminal was still on the cluster you used an hour ago. Nothing warned you, because nothing was wrong: that context really was current.
+
+**What kube-ctx does.** `kctx bind staging-eks` in the repository records it, and with the shell hook installed, entering that directory switches this terminal — no other. It applies once on entering rather than on every `cd`, so a context you pick by hand in there survives; it does not switch back when you leave, because a binding chooses a context rather than owning the shell; and a context guarded with `confirm` is never entered automatically, since walking into a directory is not consent to be in production.
+
+<br/>
+
 ## The machine without fzf
 
 **The problem.** `kubectx` degrades to a plain list without `fzf`, and `fzf` is not installed on the jump host, the fresh laptop, or the container you are debugging from.
@@ -78,6 +86,6 @@ Situations kube-ctx was built for, and what it does about them.
 
 ## Not a use case
 
-- **Editing clusters, users or credentials.** kube-ctx switches between what is already in your kubeconfig; use `kubectl config set-cluster` and friends to add entries.
-- **Merging kubeconfig files.** Set `$KUBECONFIG` to a list; that is a kubectl feature and kube-ctx respects it.
-- **Multi-cluster fan-out.** Running one command against ten clusters is a different tool's job.
+- **Editing clusters, users or credentials.** kube-ctx switches between what is already in your kubeconfig, and `kctx import` brings whole contexts in from another file; use `kubectl config set-cluster` and friends to author an entry by hand.
+- **Being a deployment tool.** `kctx exec --all` runs a command against many clusters, but it stops there: no ordering, no rollback, no waiting for one cluster before starting the next. Reach for a continuous-delivery tool when you need those.
+- **Managing what is inside a cluster.** Contexts, namespaces and credentials are the whole scope. Workloads are `kubectl`'s job.

@@ -161,6 +161,38 @@ An alias works anywhere a context name does — `kctx ctx p`, `kctx exec p -- ..
 
 <br/>
 
+## kctx bind
+
+```bash
+kctx bind                          # list every binding
+kctx bind prod-eks                 # bind the current directory
+kctx bind dev --path ~/work/api    # bind another directory
+kctx bind --delete                 # remove this directory's binding
+```
+
+Binds a directory to the context you work in there. With the shell hook installed, entering it switches this terminal — and only this terminal:
+
+```
+$ cd ~/work/payments
+Switched to context staging-eks (namespace default).  WARN
+$ cd ~/work/api
+Switched to context dev (namespace default).
+```
+
+A directory inherits the binding of its nearest bound ancestor, so binding a repository root covers the whole checkout, and a subdirectory can override it. Paths are stored resolved, so a checkout reached through a symlink still matches.
+
+Three things it deliberately does not do:
+
+- **It does not re-switch as you move around.** The binding is applied once on entering the tree, so `kctx ctx dev` typed inside a bound repository is not undone by the next `cd`.
+- **It does not switch back when you leave.** A binding chooses a context; it does not own the shell.
+- **It never enters a `confirm`-guarded context.** A prompt on every `cd` is unusable, and arriving in production by walking into a directory is the accident this tool exists to prevent. kube-ctx names the context once and leaves you where you were.
+
+Inside `kctx shell`, bindings do not apply at all — that shell asked for one context and keeps it.
+
+The hook runs `kctx bind --apply` on each directory change. With no bindings configured it returns before reading the kubeconfig, so the cost is one process start; zsh and fish use their own directory-change hooks, and bash compares `$PWD` from `PROMPT_COMMAND` because it has neither.
+
+<br/>
+
 ## kctx current
 
 ```bash
