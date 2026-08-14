@@ -117,6 +117,19 @@ without asking — they are the release pipeline.
   no change. kube-ctx exports `$KUBE_CTX_ACTIVE` / `$KUBE_CTX_DEPTH` and prints
   the snippet on the way into the first one (`hintPrompt`), but never installs
   it: rewriting `$PS1` would fight the user's own theme.
+- **The krew build cannot switch shell-locally** — `kubectl` runs a plugin as a
+  subprocess, so `kubectl ctx2 ctx prod` writes the global kubeconfig no matter
+  what: the hook is a shell function `kubectl` never consults. It cannot be
+  detected either — `kubectl` sets no environment marker, `argv` is identical,
+  and it `exec`s rather than forks, so even the parent process is the same. The
+  krew `caveats` and `docs/DEPLOYMENT.md` say so; `kubectl-ctx2` called
+  directly, with the hook installed, behaves normally.
+- **The hook is named after `argv[0]`, not `os.Executable()`** (`invokedName`,
+  `cmd/cli/init.go`) — the latter reads `/proc/self/exe` on Linux, which
+  resolves symlinks. krew puts only a `kubectl-<plugin>` symlink on `$PATH`, so
+  a hook built from the resolved path would define a function nothing can call.
+  macOS keeps the symlink and looks fine, which is how this would have shipped
+  broken on the platform most kubectl users are on.
 - **Durable edits are refused in a session** — inside a managed shell
   `$KUBECONFIG` is a copy that dies with the shell, so `rename` and `delete`
   stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than reporting a
