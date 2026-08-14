@@ -38,6 +38,7 @@ func newShellCmd(a *app) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "namespace to start in")
+	registerNamespaceFlagCompletion(a, cmd)
 	return cmd
 }
 
@@ -45,6 +46,10 @@ func newShellCmd(a *app) *cobra.Command {
 func runShell(a *app, args []string, namespace string) error {
 	cfg, target, err := sessionConfig(a, args, namespace)
 	if err != nil {
+		return err
+	}
+
+	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
 
@@ -101,11 +106,15 @@ func newExecCmd(a *app) *cobra.Command {
 			"The global kubeconfig is never written, so this is the safe way to look\n" +
 			"at production from a terminal that is working on something else.",
 		Args: cobra.MinimumNArgs(2),
+		// Only the first argument is ours; everything after it belongs to the
+		// command being run, and guessing at it would be wrong.
+		ValidArgsFunction: completeContexts(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExec(a, args[0], args[1:], namespace)
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "namespace to run in")
+	registerNamespaceFlagCompletion(a, cmd)
 	return cmd
 }
 
@@ -116,11 +125,22 @@ func runExec(a *app, target string, argv []string, namespace string) error {
 		return err
 	}
 
+	if err := requireGuardConfirmation(a, target); err != nil {
+		return err
+	}
+
 	session, err := shellenv.New(cfg, target)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = session.Remove() }()
+
+	// The badge that "kctx ctx" prints on a switch has no equivalent here, and
+	// running a command against production with no indication of where it is
+	// going is the thing this tool exists to stop.
+	if badge := guardSuffix(a, target); badge != "" {
+		fmt.Fprintf(a.errOut, "Running against %s%s\n", a.palette().Bold(target), badge)
+	}
 
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth())...)
@@ -171,11 +191,10 @@ func sessionConfig(a *app, args []string, namespace string) (*clientcmdapi.Confi
 
 	target := cfg.CurrentContext
 	if len(args) == 1 && args[0] != "" {
-		userCfg, err := a.userConfig()
+		target, err = resolveContext(a, cfg, args[0])
 		if err != nil {
 			return nil, "", err
 		}
-		target = userCfg.ResolveAlias(args[0])
 	}
 	if target == "" {
 		return nil, "", fmt.Errorf("no context given and no current context is set")

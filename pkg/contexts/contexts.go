@@ -16,13 +16,16 @@ import (
 
 // Context is a flattened view of one kubeconfig context, resolved enough to
 // print without further lookups.
+// The tags matter: without them "kctx list -o json" emits Go-style keys while
+// "kctx doctor -o json" emits lowerCamel, so one binary answers to two
+// conventions and "kctx list -o json | jq .[].name" quietly returns null.
 type Context struct {
-	Name      string
-	Cluster   string
-	User      string
-	Namespace string
-	Server    string
-	Current   bool
+	Name      string `json:"name"`
+	Cluster   string `json:"cluster"`
+	User      string `json:"user"`
+	Namespace string `json:"namespace"`
+	Server    string `json:"server"`
+	Current   bool   `json:"current"`
 }
 
 // List returns every context sorted by name.

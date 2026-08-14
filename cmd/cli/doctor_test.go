@@ -62,7 +62,7 @@ func TestDoctorJSON(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
 	_ = h.run("doctor", "-o", "json", "--timeout", "100ms")
-	if !strings.Contains(h.stdout(), `"context":"dev"`) {
+	if !strings.Contains(h.stdout(), `"context": "dev"`) {
 		t.Errorf("stdout = %s", h.stdout())
 	}
 }
@@ -187,14 +187,17 @@ func TestGuardConfirmBlocksSwitch(t *testing.T) {
 	writeUserConfig(t, "guards:\n  - match: 'prod'\n    level: danger\n    confirm: true\n")
 
 	h.stdin("no\n")
-	if err := h.run("ctx", "prod"); err != nil {
-		t.Fatalf("ctx prod: %v", err)
-	}
+	err := h.run("ctx", "prod")
 	if got := h.config().CurrentContext; got != "dev" {
 		t.Errorf("current = %q; a declined guard must not switch", got)
 	}
 	if !strings.Contains(h.stdout(), "Aborted") {
 		t.Errorf("stdout = %q", h.stdout())
+	}
+	// Declining must not look like success, or "kctx ctx prod && deploy"
+	// deploys against whatever context the shell was already on.
+	if code := ExitCode(err); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
 	}
 }
 

@@ -41,9 +41,19 @@ func (a *app) loader() *kubeconfig.Loader {
 	return kubeconfig.New(a.opts.kubeconfig)
 }
 
+// Output formats accepted by -o.
+const (
+	outputColor = "color"
+	outputPlain = "plain"
+	outputJSON  = "json"
+)
+
 // palette returns the color palette for stdout.
+//
+// "-o plain" is the same request as --no-color; treating them separately is
+// how the flag came to be documented and do nothing.
 func (a *app) palette() render.Palette {
-	return render.New(a.out, a.opts.noColor)
+	return render.New(a.out, a.opts.noColor || a.opts.output == outputPlain)
 }
 
 // userConfig loads kube-ctx's own config file.
@@ -52,7 +62,21 @@ func (a *app) userConfig() (*config.Config, error) {
 }
 
 // jsonOutput reports whether the user asked for machine-readable output.
-func (a *app) jsonOutput() bool { return a.opts.output == "json" }
+func (a *app) jsonOutput() bool { return a.opts.output == outputJSON }
+
+// validateOutput rejects an unknown -o value.
+//
+// Falling back to the default is the wrong failure mode for the flag that
+// carries the machine-readable contract: a script asking for "-o jsno" would
+// silently receive a human table and parse it as data.
+func validateOutput(format string) error {
+	switch format {
+	case outputColor, outputPlain, outputJSON:
+		return nil
+	}
+	return fmt.Errorf("unknown output format %q; want one of %s, %s, %s",
+		format, outputColor, outputPlain, outputJSON)
+}
 
 // classifier compiles the guard rules from the user's config.
 func (a *app) classifier() (*guard.Classifier, error) {
@@ -74,6 +98,10 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 			"production guards, a built-in fuzzy picker, and a cluster health check.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Runs for every subcommand, so no command has to remember to check.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return validateOutput(a.opts.output)
+		},
 		// Bare "kctx" is the most common thing to type, so it does what
 		// "kctx ctx" does: open the picker, or list when there is no terminal.
 		Args: cobra.NoArgs,
@@ -90,6 +118,8 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 	f.StringVarP(&a.opts.output, "output", "o", "color", "output format: color, plain, json")
 	f.BoolVar(&a.opts.noColor, "no-color", false, "disable color output")
 	f.BoolVarP(&a.opts.assumeYes, "yes", "y", false, "skip confirmation prompts")
+	_ = root.RegisterFlagCompletionFunc("output", cobra.FixedCompletions(
+		[]string{outputColor, outputPlain, outputJSON}, cobra.ShellCompDirectiveNoFileComp))
 
 	root.AddCommand(
 		newCtxCmd(a),
@@ -129,6 +159,23 @@ func normalizeArgs(args []string) []string {
 	return out
 }
 
+// Exit statuses kube-ctx produces on its own behalf.
+//
+// They are distinct because the interesting uses of this tool are in shell
+// one-liners: "kctx ctx prod && deploy" must not deploy when the guard was
+// declined, and "kctx doctor prod || page" must not page because --kubeconfig
+// was misspelled.
+const (
+	// ExitFailure is any error kube-ctx itself hit: unreadable kubeconfig,
+	// unknown context, a bad guard rule.
+	ExitFailure = 1
+	// ExitUnhealthy is doctor's "the clusters answered, and some are sick".
+	ExitUnhealthy = 2
+	// ExitAborted is the user declining a confirmation or closing the picker.
+	// 130 is the shell's convention for a command ended by the user.
+	ExitAborted = 130
+)
+
 // exitError carries a process exit status with no message of its own: the
 // command has already told the user everything relevant.
 type exitError struct{ code int }
@@ -144,7 +191,7 @@ func ExitCode(err error) int {
 	if errors.As(err, &e) {
 		return e.code
 	}
-	return 1
+	return ExitFailure
 }
 
 // Execute runs the root command against the process streams.

@@ -330,8 +330,13 @@ func TestListJSON(t *testing.T) {
 	if !strings.HasPrefix(strings.TrimSpace(h.stdout()), "[") {
 		t.Errorf("output is not a JSON array:\n%s", h.stdout())
 	}
-	if !strings.Contains(h.stdout(), `"Name":"dev"`) {
+	// lowerCamel, matching doctor's schema: one binary must not answer to two
+	// JSON conventions.
+	if !strings.Contains(h.stdout(), `"name": "dev"`) {
 		t.Errorf("output = %s", h.stdout())
+	}
+	if strings.Contains(h.stdout(), `"Name"`) {
+		t.Errorf("Go-style keys leaked into the JSON output:\n%s", h.stdout())
 	}
 }
 
@@ -630,9 +635,30 @@ func TestCompleteContexts(t *testing.T) {
 		}
 	}
 
-	// A second positional argument has nothing to complete.
+	// Commands taking one context have nothing to complete for a second
+	// argument.
 	if got, _ := completeContexts(a)(nil, []string{"dev"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
+	}
+}
+
+// delete, doctor and guard add take a list, so every argument completes — and
+// a name already on the line is not offered again.
+func TestCompleteContextListCoversEveryArgument(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	a := &app{out: &h.out, errOut: &h.errOut, in: h.in}
+
+	got, _ := completeContextList(a)(nil, []string{"dev"}, "")
+	joined := strings.Join(got, " ")
+	for _, want := range []string{"prod", "staging"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("completions %v missing %q", got, want)
+		}
+	}
+	for _, unwanted := range []string{"dev "} {
+		if strings.Contains(joined+" ", unwanted) {
+			t.Errorf("completions %v re-offer an argument already given", got)
+		}
 	}
 }
 

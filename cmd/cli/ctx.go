@@ -69,12 +69,7 @@ func runCtx(a *app, args []string, back int) error {
 // empty string when the user gave no target and one must be picked
 // interactively.
 func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int) (string, error) {
-	if back == 0 && len(args) == 1 {
-		if n := contexts.ParseRef(args[0]); n > 0 {
-			back = n
-		}
-	}
-	if back > 0 {
+	if back = historyRef(args, back); back > 0 {
 		history, err := contexts.NewHistory(historyScope())
 		if err != nil {
 			return "", err
@@ -85,12 +80,7 @@ func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int
 	if len(args) == 0 {
 		return pickContext(a, cfg)
 	}
-
-	userCfg, err := a.userConfig()
-	if err != nil {
-		return "", err
-	}
-	return userCfg.ResolveAlias(args[0]), nil
+	return resolveContext(a, cfg, args[0])
 }
 
 // switchContext points current-context at target, records the previous one, and
@@ -99,12 +89,7 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	if !contexts.Exists(cfg, target) {
 		return fmt.Errorf("no context named %q", target)
 	}
-	ok, err := confirmGuard(a, target)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		_, err := fmt.Fprintln(a.out, "Aborted.")
+	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
 
@@ -151,8 +136,31 @@ func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
 	return a.loader().Save(cfg)
 }
 
+// requireGuardConfirmation runs the guard prompt, if the rule asks for one,
+// before anything is allowed to reach the context.
+//
+// Every route to a cluster goes through here — switching, opening a subshell,
+// and running a single command. A guard that only covered "kctx ctx" would be
+// bypassed by "kctx exec prod -- kubectl delete ...", which is the more
+// dangerous of the two.
+func requireGuardConfirmation(a *app, target string) error {
+	ok, err := confirmGuard(a, target)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		if _, err := fmt.Fprintln(a.out, "Aborted."); err != nil {
+			return err
+		}
+		// Declining has to be distinguishable from success, or "kctx ctx prod
+		// && ./deploy.sh" deploys against whatever context you were already on.
+		return &exitError{code: ExitAborted}
+	}
+	return nil
+}
+
 // confirmGuard asks for confirmation when a guard rule demands it before
-// switching to a context.
+// reaching a context.
 func confirmGuard(a *app, target string) (bool, error) {
 	classifier, err := a.classifier()
 	if err != nil {
@@ -215,23 +223,51 @@ func printContextNames(a *app, cfg *clientcmdapi.Config) error {
 	return nil
 }
 
-// completeContexts provides shell completion for context names and aliases.
+// completeContexts completes the first context argument only, for commands
+// that take exactly one.
 func completeContexts(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) > 0 {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
-		cfg, err := a.loader().Load()
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveError
-		}
-		names := contexts.Names(cfg)
+		return contextCandidates(a, nil)
+	}
+}
 
-		if userCfg, err := a.userConfig(); err == nil {
-			for _, pair := range userCfg.AliasList() {
+// completeContextList completes every positional argument, minus the ones
+// already typed.
+//
+// "delete", "doctor" and "guard add" all take a list; wiring them to the
+// single-argument version meant the second name onwards completed nothing.
+func completeContextList(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return contextCandidates(a, args)
+	}
+}
+
+// contextCandidates lists context names and aliases, skipping any in used.
+func contextCandidates(a *app, used []string) ([]string, cobra.ShellCompDirective) {
+	taken := make(map[string]struct{}, len(used))
+	for _, name := range used {
+		taken[name] = struct{}{}
+	}
+	cfg, err := a.loader().Load()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+
+	var names []string
+	for _, name := range contexts.Names(cfg) {
+		if _, ok := taken[name]; !ok {
+			names = append(names, name)
+		}
+	}
+	if userCfg, err := a.userConfig(); err == nil {
+		for _, pair := range userCfg.AliasList() {
+			if _, ok := taken[pair.Alias]; !ok {
 				names = append(names, pair.Alias+"\t→ "+pair.Target)
 			}
 		}
-		return names, cobra.ShellCompDirectiveNoFileComp
 	}
+	return names, cobra.ShellCompDirectiveNoFileComp
 }

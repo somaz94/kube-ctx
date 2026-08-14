@@ -100,12 +100,7 @@ func chooseNamespace(a *app, cfg *clientcmdapi.Config, refresh bool, timeout tim
 // resolveNamespaceArg turns the command line into a namespace name, or "" when
 // the user gave no target.
 func resolveNamespaceArg(cfg *clientcmdapi.Config, args []string, back int) (string, error) {
-	if back == 0 && len(args) == 1 {
-		if n := contexts.ParseRef(args[0]); n > 0 {
-			back = n
-		}
-	}
-	if back > 0 {
+	if back = historyRef(args, back); back > 0 {
 		history, err := nsHistory(cfg.CurrentContext)
 		if err != nil {
 			return "", err
@@ -141,14 +136,26 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 		}
 	}
 
+	// The badge belongs here too: moving between namespaces inside production
+	// is still moving around inside production, and this line already names the
+	// context it is happening in.
 	pal := a.palette()
-	_, err = fmt.Fprintf(a.out, "Namespace set to %s in context %s.\n",
-		pal.Cyan(target), pal.Bold(cfg.CurrentContext))
+	_, err = fmt.Fprintf(a.out, "Namespace set to %s in context %s.%s\n",
+		pal.Cyan(target), pal.Bold(cfg.CurrentContext), guardSuffix(a, cfg.CurrentContext))
 	return err
 }
 
 // printNamespaces writes one namespace per line, marking the active one.
 func printNamespaces(a *app, names []string, current string) error {
+	if len(names) == 0 {
+		// A cluster can answer with an empty list when RBAC forbids listing
+		// namespaces. Printing nothing and exiting 0 reads as a broken binary,
+		// the same way it would for "kctx" with no contexts.
+		_, err := fmt.Fprintln(a.errOut,
+			"No namespaces returned; the credential may not be allowed to list them.")
+		return err
+	}
+
 	pal := a.palette()
 	for _, name := range names {
 		line := name
@@ -194,6 +201,14 @@ func nsHistory(ctxName string) (*contexts.History, error) {
 		scope = shell + "-" + scope
 	}
 	return contexts.NewHistory(scope)
+}
+
+// registerNamespaceFlagCompletion wires -n to the namespace list.
+//
+// Best-effort: a completion that cannot be registered is not worth failing a
+// command over, and cobra only errors here when the flag does not exist.
+func registerNamespaceFlagCompletion(a *app, cmd *cobra.Command) {
+	_ = cmd.RegisterFlagCompletionFunc("namespace", completeNamespaces(a))
 }
 
 // completeNamespaces provides shell completion from the namespace cache.

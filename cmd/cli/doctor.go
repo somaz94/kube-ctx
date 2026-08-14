@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -30,7 +29,7 @@ func newDoctorCmd(a *app) *cobra.Command {
 			"the cluster cannot be reached at all.\n\n" +
 			"Exits non-zero when any probed context is unhealthy, so it can gate a\n" +
 			"script.",
-		ValidArgsFunction: completeContexts(a),
+		ValidArgsFunction: completeContextList(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDoctor(a, args, timeout, concurrency, unhealthy)
 		},
@@ -50,6 +49,11 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 	}
 	if len(cfg.Contexts) == 0 {
 		_, err := fmt.Fprintln(a.errOut, "No contexts found in the kubeconfig.")
+		return err
+	}
+
+	names, err = resolveContexts(a, cfg, names)
+	if err != nil {
 		return err
 	}
 
@@ -74,7 +78,7 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 	}
 
 	if a.jsonOutput() {
-		if err := json.NewEncoder(a.out).Encode(results); err != nil {
+		if err := writeJSON(a, results); err != nil {
 			return err
 		}
 	} else if err := renderDoctorTable(a, cfg.CurrentContext, results); err != nil {
@@ -83,9 +87,12 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 
 	for _, r := range results {
 		if !r.Healthy() {
-			// A non-zero exit makes the command usable as a check in a script.
+			// A non-zero exit makes the command usable as a check in a script,
+			// and a code of its own separates "a cluster is sick" from "kctx
+			// could not run" — otherwise "kctx doctor prod || page" fires the
+			// same way for an unreachable cluster and a typo in --kubeconfig.
 			// The error is silent because the table already said what is wrong.
-			return &exitError{code: 1}
+			return &exitError{code: ExitUnhealthy}
 		}
 	}
 	return nil

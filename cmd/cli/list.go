@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -35,7 +34,9 @@ func runList(a *app, wide bool) error {
 	list := contexts.List(cfg)
 
 	if a.jsonOutput() {
-		return json.NewEncoder(a.out).Encode(list)
+		// Returned before the classifier runs: the guard badge is a rendering
+		// concern, and JSON consumers classify for themselves.
+		return writeJSON(a, list)
 	}
 
 	classifier, err := a.classifier()

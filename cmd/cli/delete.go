@@ -25,7 +25,7 @@ func newDeleteCmd(a *app) *cobra.Command {
 			"dropping one context is rarely what anyone wants.\n\n" +
 			"The kubeconfig is backed up before the write.",
 		Args:              cobra.MinimumNArgs(1),
-		ValidArgsFunction: completeContexts(a),
+		ValidArgsFunction: completeContextList(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDelete(a, args, pruneOrphans)
 		},
@@ -46,15 +46,9 @@ func runDelete(a *app, names []string, pruneOrphans bool) error {
 		return err
 	}
 
-	targets := make([]string, 0, len(names))
-	for _, name := range names {
-		if name == "." {
-			if cfg.CurrentContext == "" {
-				return fmt.Errorf("no current context to delete")
-			}
-			name = cfg.CurrentContext
-		}
-		targets = append(targets, name)
+	targets, err := resolveContexts(a, cfg, names)
+	if err != nil {
+		return err
 	}
 
 	pal := a.palette()
