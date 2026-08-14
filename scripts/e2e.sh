@@ -534,6 +534,40 @@ check_edits() {
   assert_status 0 "the kubeconfig is still usable after the edits"
 }
 
+check_fanout() {
+  section "Running one command against many contexts"
+
+  local before
+  before="$(session_count)"
+
+  # $PROD points at an unreachable cluster on purpose, so this is the mixed case:
+  # some contexts answer and one does not.
+  capture kctx exec --all -- kubectl get --raw /version
+  assert_status 1 "a fan-out exits non-zero when one context fails"
+  assert_contains "$LIVE" "every context is reported"
+  assert_contains "$PROD" "... including the one that failed"
+  assert_contains "failed" "... with a summary naming it"
+
+  capture kctx exec -c "$LIVE" -- kubectl config current-context
+  assert_status 0 "a single-context fan-out succeeds"
+  assert_contains "$LIVE" "the child ran against the context it was given"
+
+  # The point of exec: nothing switches. A "for" loop over kubectl config
+  # use-context is exactly what this replaces.
+  assert_eq "$LIVE" "$(current_context)" "the fan-out changed no context"
+
+  # Each child gets a copy of the merged kubeconfig — every cluster, token and
+  # cert in it — so one left behind per context is a real leak.
+  assert_eq "$before" "$(session_count)" "every session copy was removed"
+
+  capture kctx exec --all -o json -- kubectl config current-context
+  if printf '%s' "$E2E_OUTPUT" | jq -e 'length >= 3 and all(.[]; has("context") and has("exitCode"))' >/dev/null 2>&1; then
+    pass "-o json emits one object per context"
+  else
+    fail "-o json emits one object per context" "output was not the expected JSON"
+  fi
+}
+
 check_transfer() {
   section "Importing and exporting kubeconfigs"
 
@@ -616,6 +650,7 @@ main() {
   check_hook
   check_guard
   check_alias
+  check_fanout
   check_edits
   check_transfer
 

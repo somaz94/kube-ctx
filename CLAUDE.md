@@ -90,6 +90,17 @@ without asking — they are the release pipeline.
   removes every orphan the way `delete --prune` does. Scoping the removal too
   would make the note's own advice fail — by the time you re-run with `--prune`,
   the stanzas it named are no longer new.
+- **Fan-out** (`cmd/cli/fanout.go`) — `exec --all` / `-c` runs one command
+  against many contexts at once. The flag, not the number of contexts, decides
+  the execution model: a positional context streams (stdin and both output
+  streams are the terminal's, which is what makes `kubectl logs -f` work), while
+  `--all` / `-c` capture output and pass no stdin, because several children
+  cannot share one terminal. That is also what makes `-o json` possible here and
+  impossible for the streamed form. Every guard is answered *before* the first
+  child starts — a guard that fires once the command has reached half the
+  clusters is not one — and the exit status is the first non-zero child in the
+  order the contexts were named, since there is no single status to pass
+  through and `&& ./ship` must not ship on a partial failure.
 - **Prompts vs payload** (`promptingOnStderr`, `cmd/cli/util.go`) — `export`
   writes a kubeconfig to stdout, so its guard prompt has to go to stderr;
   otherwise `kctx export prod > prod.yaml` puts the question in the file and

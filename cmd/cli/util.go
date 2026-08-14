@@ -112,6 +112,26 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), d)
 }
 
+// dedupe removes repeats, keeping the first occurrence and the original order.
+//
+// Both commands that take a list of contexts want this: naming one twice is a
+// typo, not a request to export it twice or run the command against it twice.
+func dedupe(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
+}
+
+// joinNames renders a list of names for a message.
+func joinNames(names []string) string { return strings.Join(names, ", ") }
+
 // promptingOnStderr returns a view of the app whose questions and notices go to
 // stderr instead of stdout.
 //

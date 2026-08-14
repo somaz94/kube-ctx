@@ -261,6 +261,36 @@ kctx exec p -- kubectl top nodes           # aliases work here too
 
 Runs one command with its kubeconfig pinned to a context, then throws the copy away. The command's own exit status is passed through unchanged, so `kctx exec ... -- kubectl get pod x || echo missing` behaves the way you would expect.
 
+`--all` and `-c` run against several contexts at once:
+
+```bash
+kctx exec --all -- kubectl get nodes
+kctx exec -c dev,staging -- kubectl get deploy -n api
+kctx exec --all -p 2 -- kubectl version      # at most two clusters at a time
+kctx exec --all -o json -- kubectl get ns    # one object per context
+```
+
+```
+$ kctx exec -c dev,prod -- kubectl get nodes -o name
+== dev
+node/dev-control-plane
+== prod  DANGER  exit 1
+1 of 2 context(s) failed: prod
+```
+
+Which flag you use decides *how* the command runs, not just how many contexts it lands on:
+
+| | `kctx exec <ctx>` | `--all` / `-c` |
+|---|---|---|
+| Output | streamed straight through | captured, then printed per context |
+| stdin | the terminal's | none |
+| Concurrency | — | `-p`, 8 by default |
+| Exit status | the command's own | the first non-zero, in the order the contexts were named |
+
+The split is not arbitrary. Streaming is what makes `kctx exec prod -- kubectl logs -f` work, and it is exactly what cannot work for several children at once: four clusters writing to one terminal interleave into nonsense, and a command that waits on stdin would hang the sweep with nothing on screen to say why. Capturing also makes `-o json` meaningful — `[{"context": …, "exitCode": …, "stdout": …, "stderr": …}]` — which a streamed command could not produce.
+
+Every guard is answered before any command runs. Declining any one of them aborts the whole thing and exits `130`, so a fan-out never reaches half its clusters and then stops to ask.
+
 <br/>
 
 ## kctx init

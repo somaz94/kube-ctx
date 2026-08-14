@@ -44,6 +44,14 @@ Situations kube-ctx was built for, and what it does about them.
 
 <br/>
 
+## The same question, ten clusters
+
+**The problem.** "Which of our clusters is still on 1.28?" The honest answer takes a `for` loop that switches context, runs `kubectl`, and switches back — which changes the current context of every other terminal while it runs, silently skips the clusters it cannot reach, and reports success either way because the loop's exit status is the last iteration's.
+
+**What kube-ctx does.** `kctx exec --all -- kubectl version` runs them in parallel, each in its own throwaway kubeconfig, so no terminal's context changes at all. Output is captured and printed per context instead of interleaved, guarded contexts are answered before anything runs, and the exit status is the first non-zero one — so `kctx exec -c dev,staging -- kubectl apply -f . && ./promote.sh` does not promote when one cluster rejected the apply. `-o json` gives one object per context for the cases where a table was going to be grepped.
+
+<br/>
+
 ## The VPN that just dropped
 
 **The problem.** `kubens` asks the API server for the namespace list. Off VPN, you get an error and no way to switch namespaces even though the target is one you use every day.

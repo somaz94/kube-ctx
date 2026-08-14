@@ -126,17 +126,7 @@ func exportTargets(a *app, cfg *clientcmdapi.Config, names []string, all bool) (
 	if err != nil {
 		return nil, err
 	}
-
-	seen := make(map[string]bool, len(resolved))
-	targets := make([]string, 0, len(resolved))
-	for _, name := range resolved {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		targets = append(targets, name)
-	}
-	return targets, nil
+	return dedupe(resolved), nil
 }
 
 // encodeExport serializes the extracted config in the requested format.

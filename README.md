@@ -27,6 +27,7 @@
 | **Production guard** | None | Contexts classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `shell` and `exec` alike |
 | **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency |
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
+| **The same question, every cluster** | A `for` loop that switches and hopes | `kctx exec --all -- kubectl get nodes`, in parallel |
 | **Namespace list offline** | Fails when the API server is unreachable | Falls back to a cache and says so |
 | **Cluster health** | — | `kctx doctor`: reachability, version, expired certs and tokens |
 | **Adding someone's kubeconfig** | Hand-merge, or `--flatten` and hope the names do not clash | `kctx import`: colliding stanzas are disambiguated, never overwritten |
@@ -109,6 +110,7 @@ kctx ns kube-system              # namespace of the current context
 kctx list --wide                 # everything at a glance
 kctx doctor                      # what still works?
 kctx exec prod-eks -- kubectl get nodes    # one command, no switch
+kctx exec --all -- kubectl get nodes       # every cluster, in parallel
 kctx shell prod-eks              # a subshell pinned to prod
 ```
 
@@ -131,6 +133,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
 | `kctx shell [context]` | Subshell pinned to a context |
 | `kctx exec <context> -- <cmd>` | Run one command against a context |
+| `kctx exec --all\|-c a,b -- <cmd>` | Run it against many contexts at once |
 | `kctx init bash\|zsh\|fish` | Shell hook + completions |
 | `kctx version` | Build information |
 

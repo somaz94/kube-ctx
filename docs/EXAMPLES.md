@@ -98,6 +98,36 @@ Scripts opt out with `-y`.
 
 <br/>
 
+## Ask every cluster the same question
+
+```bash
+$ kctx exec --all -- kubectl get nodes -o name
+== dev
+node/dev-control-plane
+== prod-eks-apne2  DANGER
+node/ip-10-0-1-14.ap-northeast-2.compute.internal
+node/ip-10-0-2-31.ap-northeast-2.compute.internal
+== staging  WARN  exit 1
+1 of 3 context(s) failed: staging
+```
+
+The contexts run in parallel, each in its own throwaway kubeconfig, and the output is grouped rather than interleaved. Nothing switches — the terminal is on whatever context it was on before.
+
+The failing context sets the exit status, so this is safe in a pipeline:
+
+```bash
+kctx exec -c dev,staging -- kubectl apply -f manifests/ && ./promote.sh
+```
+
+For anything that is going to be parsed, ask for the structure instead of grepping the table:
+
+```bash
+$ kctx exec --all -o json -- kubectl get ns -o name | jq -r '.[] | select(.exitCode != 0) | .context'
+staging
+```
+
+<br/>
+
 ## Find the dead contexts
 
 ```bash

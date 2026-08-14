@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -96,27 +97,107 @@ func runShell(a *app, args []string, namespace string) error {
 	return nil
 }
 
-// newExecCmd runs one command against a context without switching to it.
+// execOptions holds the flags of the exec command.
+type execOptions struct {
+	namespace string
+	contexts  []string
+	all       bool
+	parallel  int
+}
+
+// newExecCmd runs one command against one context, or against many at once.
 func newExecCmd(a *app) *cobra.Command {
-	var namespace string
+	var opts execOptions
 
 	cmd := &cobra.Command{
 		Use:   "exec <context> -- <command> [args...]",
 		Short: "Run one command against a context without switching",
 		Long: "Run a single command with its kubeconfig pinned to one context.\n\n" +
 			"The global kubeconfig is never written, so this is the safe way to look\n" +
-			"at production from a terminal that is working on something else.",
-		Args: cobra.MinimumNArgs(2),
+			"at production from a terminal that is working on something else.\n\n" +
+			"--all and --context run against several contexts at once:\n\n" +
+			"  kctx exec --all -- kubectl get nodes\n" +
+			"  kctx exec -c dev,staging -- kubectl get deploy -n api\n\n" +
+			"Which one you use decides how the command runs, not how many contexts\n" +
+			"it ends up with. A named context streams: stdin, stdout and stderr are\n" +
+			"the terminal's, so \"kctx exec prod -- kubectl logs -f\" works. --all and\n" +
+			"--context capture the output and print it per context once each command\n" +
+			"finishes, and pass no stdin — several children cannot share a terminal,\n" +
+			"and interleaved lines from four clusters are unreadable.\n\n" +
+			"Every guard is answered before anything runs. The exit status is the\n" +
+			"command's own; where several ran, it is the first non-zero one.",
+		// Checked in RunE rather than here: what counts as enough arguments
+		// depends on whether the contexts came from a flag, and cobra's own
+		// "requires at least 1 arg(s)" says nothing about which one is missing.
+		Args: cobra.ArbitraryArgs,
 		// Only the first argument is ours; everything after it belongs to the
 		// command being run, and guessing at it would be wrong.
 		ValidArgsFunction: completeContexts(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runExec(a, args[0], args[1:], namespace)
+			return runExecCmd(a, cmd, args, opts)
 		},
 	}
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "namespace to run in")
+
+	f := cmd.Flags()
+	f.StringVarP(&opts.namespace, "namespace", "n", "", "namespace to run in")
+	f.StringSliceVarP(&opts.contexts, "context", "c", nil, "run against these contexts at once (repeatable)")
+	f.BoolVar(&opts.all, "all", false, "run against every context at once")
+	f.IntVarP(&opts.parallel, "parallel", "p", defaultFanoutParallel, "how many contexts to run at once")
+	cmd.MarkFlagsMutuallyExclusive("all", "context")
 	registerNamespaceFlagCompletion(a, cmd)
+	_ = cmd.RegisterFlagCompletionFunc("context", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return contextCandidates(a, nil)
+	})
 	return cmd
+}
+
+// runExecCmd splits the command line and dispatches to the single-context or
+// the fan-out path.
+func runExecCmd(a *app, cmd *cobra.Command, args []string, opts execOptions) error {
+	if !opts.all && len(opts.contexts) == 0 {
+		if len(args) < 2 {
+			return fmt.Errorf("exec needs a context and a command, as in: kctx exec prod -- kubectl get pods")
+		}
+		return runExec(a, args[0], args[1:], opts.namespace)
+	}
+
+	// In fan-out the contexts came from the flags, so everything left is the
+	// command. A positional name here means the two ways of choosing contexts
+	// were mixed, and picking one silently would run against the wrong set.
+	if dash := cmd.ArgsLenAtDash(); dash > 0 {
+		return fmt.Errorf("--all and --context choose the contexts themselves; drop %q from before --",
+			strings.Join(args[:dash], " "))
+	}
+	if len(args) == 0 {
+		return fmt.Errorf("no command given, as in: kctx exec --all -- kubectl get nodes")
+	}
+
+	cfg, err := a.loader().Load()
+	if err != nil {
+		return err
+	}
+	targets, err := fanoutTargets(a, cfg, opts)
+	if err != nil {
+		return err
+	}
+	return runFanout(a, cfg, targets, args, opts)
+}
+
+// fanoutTargets resolves the contexts a fan-out runs against, deduplicated and
+// in the order the user named them.
+func fanoutTargets(a *app, cfg *clientcmdapi.Config, opts execOptions) ([]string, error) {
+	if opts.all {
+		targets := contexts.Names(cfg)
+		if len(targets) == 0 {
+			return nil, fmt.Errorf("no contexts found in the kubeconfig")
+		}
+		return targets, nil
+	}
+	resolved, err := resolveContexts(a, cfg, opts.contexts)
+	if err != nil {
+		return nil, err
+	}
+	return dedupe(resolved), nil
 }
 
 // runExec builds a throwaway session and runs argv inside it.
