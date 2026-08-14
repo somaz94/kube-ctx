@@ -471,3 +471,92 @@ func TestCompleteSourceContexts(t *testing.T) {
 		t.Errorf("completions = %v, want none", got)
 	}
 }
+
+// --overwrite repoints a context, which can leave the cluster and user it used
+// to name unreferenced. Reporting every unreferenced stanza instead of the ones
+// this import created would blame it for a year of accumulated cruft.
+func TestImportReportsOnlyWhatItOrphaned(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	// A stanza nothing referenced before the import was ever run.
+	cfg := testutil.Config(defaultSpec())
+	cfg.Clusters["already-orphaned"] = &clientcmdapi.Cluster{Server: "https://old.example.com:6443"}
+	testutil.Write(t, h.kubeconfig, cfg)
+
+	src := writeSource(t, h, "downloaded.yaml", testutil.Spec{
+		Current:  "prod",
+		Contexts: []testutil.Ctx{{Name: "prod", Cluster: "acme", User: "acme-user", Server: "https://acme.example.com:6443"}},
+	})
+
+	if err := h.run("import", src, "--overwrite"); err != nil {
+		t.Fatalf("import --overwrite: %v", err)
+	}
+	for _, want := range []string{"prod-cluster", "prod-user", "--prune"} {
+		if !strings.Contains(h.stderr(), want) {
+			t.Errorf("stderr = %q, want it to mention %s", h.stderr(), want)
+		}
+	}
+	if strings.Contains(h.stderr(), "already-orphaned") {
+		t.Errorf("stderr = %q; this import did not orphan that one", h.stderr())
+	}
+	// Reported, not removed — the same bargain "kctx delete" strikes.
+	if _, ok := h.config().Clusters["prod-cluster"]; !ok {
+		t.Error("the stanza was removed without --prune being asked for")
+	}
+}
+
+// The note says to re-run with --prune, so re-running with --prune has to work.
+// By then the stanzas it named are no longer *newly* orphaned, so a prune scoped
+// to this import's own leftovers would quietly skip them — and nothing else
+// changed on that run either, so the write has to happen for the prune alone.
+func TestImportPruneAfterTheHint(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	src := writeSource(t, h, "downloaded.yaml", testutil.Spec{
+		Current:  "prod",
+		Contexts: []testutil.Ctx{{Name: "prod", Cluster: "acme", User: "acme-user", Server: "https://acme.example.com:6443"}},
+	})
+
+	if err := h.run("import", src, "--overwrite"); err != nil {
+		t.Fatalf("import --overwrite: %v", err)
+	}
+	if err := h.run("import", src, "--overwrite", "--prune"); err != nil {
+		t.Fatalf("import --prune: %v", err)
+	}
+
+	cfg := h.config()
+	if _, ok := cfg.Clusters["prod-cluster"]; ok {
+		t.Errorf("clusters = %v, want prod-cluster gone", cfg.Clusters)
+	}
+	if _, ok := cfg.AuthInfos["prod-user"]; ok {
+		t.Errorf("users = %v, want prod-user gone", cfg.AuthInfos)
+	}
+	if strings.Contains(h.stderr(), "unreferenced") {
+		t.Errorf("stderr = %q, want no leftover note after a prune", h.stderr())
+	}
+	// The context that replaced it still has to resolve.
+	if got := cfg.Contexts["prod"].Cluster; got != "acme" {
+		t.Errorf("prod points at %q, want acme", got)
+	}
+	if _, ok := cfg.Clusters["acme"]; !ok {
+		t.Errorf("clusters = %v, want the imported one kept", cfg.Clusters)
+	}
+}
+
+func TestImportDryRunDoesNotPrune(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	src := writeSource(t, h, "downloaded.yaml", testutil.Spec{
+		Current:  "prod",
+		Contexts: []testutil.Ctx{{Name: "prod", Cluster: "acme", User: "acme-user", Server: "https://acme.example.com:6443"}},
+	})
+
+	if err := h.run("import", src, "--overwrite", "--prune", "--dry-run"); err != nil {
+		t.Fatalf("import --dry-run --prune: %v", err)
+	}
+	cfg := h.config()
+	if _, ok := cfg.Clusters["prod-cluster"]; !ok {
+		t.Error("--dry-run pruned anyway")
+	}
+	if got := cfg.Contexts["prod"].Cluster; got != "prod-cluster" {
+		t.Errorf("--dry-run wrote the overwrite: prod points at %q", got)
+	}
+}

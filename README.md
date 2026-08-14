@@ -124,7 +124,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx list [--wide]` | Table of every context, with guard badges |
 | `kctx rename <old> <new>` | Rename a context (`.` = current) |
 | `kctx delete <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
-| `kctx import <file>...` | Merge contexts from another kubeconfig, without colliding |
+| `kctx import <file>... [--prune]` | Merge contexts from another kubeconfig, without colliding |
 | `kctx export [name]... [-f file]` | Write contexts out as a standalone kubeconfig |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
 | `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |

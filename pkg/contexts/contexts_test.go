@@ -275,3 +275,30 @@ func TestPruneOrphans(t *testing.T) {
 		t.Error("in-use cluster was pruned")
 	}
 }
+
+// An edit reports what it orphaned, which means subtracting what was already
+// unreferenced before it ran.
+func TestOrphansWithout(t *testing.T) {
+	before := Orphans{Clusters: []string{"old-cluster"}, Users: []string{"old-user"}}
+	after := Orphans{
+		Clusters: []string{"fresh-cluster", "old-cluster"},
+		Users:    []string{"fresh-user", "old-user"},
+	}
+
+	got := after.Without(before)
+	if len(got.Clusters) != 1 || got.Clusters[0] != "fresh-cluster" {
+		t.Errorf("clusters = %v, want only fresh-cluster", got.Clusters)
+	}
+	if len(got.Users) != 1 || got.Users[0] != "fresh-user" {
+		t.Errorf("users = %v, want only fresh-user", got.Users)
+	}
+	if !after.Without(after).Empty() {
+		t.Error("subtracting an identical set leaves nothing")
+	}
+	if got := before.Without(Orphans{}); len(got.Clusters) != 1 {
+		t.Errorf("clusters = %v, want the set unchanged", got.Clusters)
+	}
+	if !(Orphans{}).Without(before).Empty() {
+		t.Error("subtracting from nothing leaves nothing")
+	}
+}

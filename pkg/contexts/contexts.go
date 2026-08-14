@@ -146,6 +146,38 @@ type Orphans struct {
 // Empty reports whether nothing was orphaned.
 func (o Orphans) Empty() bool { return len(o.Clusters) == 0 && len(o.Users) == 0 }
 
+// Without returns the entries of o that other does not have.
+//
+// It exists so an edit can report what *it* orphaned rather than everything
+// lying around: a kubeconfig that has been in use for a year usually holds a
+// few unreferenced stanzas already, and blaming them on the command the user
+// just ran is how a note becomes noise people learn to skip.
+func (o Orphans) Without(other Orphans) Orphans {
+	return Orphans{
+		Clusters: subtract(o.Clusters, other.Clusters),
+		Users:    subtract(o.Users, other.Users),
+	}
+}
+
+// subtract returns the members of names that seen does not contain, in order.
+func subtract(names, seen []string) []string {
+	if len(names) == 0 {
+		return nil
+	}
+	skip := make(map[string]bool, len(seen))
+	for _, name := range seen {
+		skip[name] = true
+	}
+
+	var out []string
+	for _, name := range names {
+		if !skip[name] {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // Delete removes contexts and reports which cluster and user stanzas are left
 // unreferenced. The stanzas are *not* removed — deleting shared credentials as
 // a side effect of dropping one context is exactly the kind of surprise this
@@ -165,11 +197,11 @@ func Delete(cfg *clientcmdapi.Config, names ...string) (Orphans, error) {
 			cfg.CurrentContext = ""
 		}
 	}
-	return findOrphans(cfg), nil
+	return FindOrphans(cfg), nil
 }
 
-// findOrphans returns clusters and users that no context references.
-func findOrphans(cfg *clientcmdapi.Config) Orphans {
+// FindOrphans returns clusters and users that no context references.
+func FindOrphans(cfg *clientcmdapi.Config) Orphans {
 	usedClusters := make(map[string]bool, len(cfg.Contexts))
 	usedUsers := make(map[string]bool, len(cfg.Contexts))
 	for _, c := range cfg.Contexts {

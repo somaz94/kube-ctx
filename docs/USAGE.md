@@ -97,6 +97,7 @@ kctx import a.yaml b.yaml                     # several files at once
 kctx import k.yaml --context prod --as acme   # one context, under a new name
 kctx import k.yaml --prefix acme-             # namespace the whole file
 kctx import k.yaml --overwrite                # replace what is already there
+kctx import k.yaml --overwrite --prune        # and clean up what that orphaned
 kctx import k.yaml --dry-run                  # report, change nothing
 ```
 
@@ -112,6 +113,18 @@ Imported 1 context(s). Switch to one with kctx ctx <name>.
 ```
 
 That `kubernetes-2` is the interesting part. Cluster and user names collide far more often than context names do — every kubeadm cluster calls its cluster `kubernetes` and its user `kubernetes-admin` — and `kubectl config view --flatten` resolves that by last-writer-wins, which silently repoints the contexts you already had at a different API server. `kctx import` never replaces a stanza whose contents differ: the incoming one is stored under a suffixed name and only the imported context is pointed at it. A stanza that is byte-for-byte the one already there is reused rather than copied, so importing five contexts that share a cluster does not leave five copies of it behind.
+
+`--overwrite` repoints a context, which can leave the cluster and user it used to name unreferenced. The note that follows names those, and only those — not whatever your kubeconfig was already carrying, because a hint that lists a year of accumulated cruft is one you learn to skip:
+
+```
+$ kctx import ~/Downloads/acme.yaml --overwrite
+CONTEXT  ACTION       CLUSTER  USER       SOURCE
+prod     overwritten  acme     acme-user
+Imported 1 context(s). Switch to one with kctx ctx <name>.
+note: cluster(s) prod-cluster and user(s) prod-user are now unreferenced; re-run with --prune to remove them
+```
+
+`--prune` does the removal, and like `kctx delete --prune` it takes *every* unreferenced entry rather than only this import's leftovers — otherwise re-running with `--prune`, which is exactly what the note tells you to do, would skip the stanzas it just named.
 
 The kubeconfig is backed up first, and the write lands in your own kubeconfig — never back in the file you imported from.
 

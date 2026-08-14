@@ -84,6 +84,12 @@ without asking — they are the release pipeline.
   from. `Extract` keeps it, since it is what resolves a relative certificate
   path for `--flatten`. Merge works on a `DeepCopy` and commits at the end, so a
   refused collision leaves the config untouched rather than half-imported.
+  `import --overwrite` can orphan the stanzas the replaced context named, and the
+  two halves of that are deliberately asymmetric: the *note* subtracts
+  `Orphans.Without` so it names only what this import orphaned, while `--prune`
+  removes every orphan the way `delete --prune` does. Scoping the removal too
+  would make the note's own advice fail — by the time you re-run with `--prune`,
+  the stanzas it named are no longer new.
 - **Prompts vs payload** (`promptingOnStderr`, `cmd/cli/util.go`) — `export`
   writes a kubeconfig to stdout, so its guard prompt has to go to stderr;
   otherwise `kctx export prod > prod.yaml` puts the question in the file and

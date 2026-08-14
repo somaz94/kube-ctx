@@ -577,6 +577,29 @@ check_transfer() {
   # and must not leave a second copy of the cluster behind.
   capture kctx import "$exported" --as imported-e2e
   assert_contains "unchanged" "re-importing the same file changes nothing"
+
+  # Overwriting $PROD repoints it away from the unreachable cluster only it used,
+  # so that stanza is left unreferenced. Only a real write proves the prune
+  # reaches the file: clientcmd has to delete the stanza, not merely drop it from
+  # the in-memory config.
+  local live_cluster
+  live_cluster="$(kubectl config view -o jsonpath='{.contexts[?(@.name=="imported-e2e")].context.cluster}')"
+  capture kctx import "$exported" --as "$PROD" --overwrite
+  assert_contains "unreferenced" "overwriting reports what it orphaned"
+
+  capture kctx import "$exported" --as "$PROD" --overwrite --prune
+  assert_status 0 "--prune runs after the note said to re-run with it"
+  case " $(kubectl config view -o jsonpath='{.clusters[*].name}') " in
+  *" offline-e2e "*) fail "the pruned stanza is gone from the kubeconfig" "offline-e2e is still there" ;;
+  *) pass "the pruned stanza is gone from the kubeconfig" ;;
+  esac
+  case " $(kubectl config view -o jsonpath='{.clusters[*].name}') " in
+  *" $live_cluster "*) pass "the cluster still in use survived the prune" ;;
+  *) fail "the cluster still in use survived the prune" "$live_cluster was removed" ;;
+  esac
+
+  capture kctx doctor imported-e2e --timeout 10s
+  assert_status 0 "the surviving context still reaches the cluster"
 }
 
 # --- main --------------------------------------------------------------------

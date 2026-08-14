@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/somaz94/kube-ctx/pkg/contexts"
 	"github.com/somaz94/kube-ctx/pkg/kubeconfig"
 	"github.com/somaz94/kube-ctx/pkg/transfer"
 )
@@ -15,6 +16,7 @@ type importOptions struct {
 	prefix    string
 	as        string
 	overwrite bool
+	prune     bool
 	dryRun    bool
 }
 
@@ -39,6 +41,10 @@ func newImportCmd(a *app) *cobra.Command {
 			"whose contents differ is imported under a suffixed name instead of\n" +
 			"replacing the one already there, which would repoint the contexts that\n" +
 			"share it at a different API server.\n\n" +
+			"Replacing a context with --overwrite can leave the cluster and user it used\n" +
+			"to point at unreferenced. The report names those, and only those — not the\n" +
+			"stanzas your kubeconfig was already carrying. --prune removes them, and\n" +
+			"like \"kctx delete --prune\" it takes every unreferenced entry with them.\n\n" +
 			"The kubeconfig is backed up before the write.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,6 +57,7 @@ func newImportCmd(a *app) *cobra.Command {
 	f.StringVar(&opts.prefix, "prefix", "", "prepend this to every imported context name")
 	f.StringVar(&opts.as, "as", "", "import a single context under this name")
 	f.BoolVar(&opts.overwrite, "overwrite", false, "replace contexts that already exist")
+	f.BoolVar(&opts.prune, "prune", false, "also remove cluster and user entries this import leaves unreferenced")
 	f.BoolVar(&opts.dryRun, "dry-run", false, "report what would be imported and change nothing")
 	cmd.MarkFlagsMutuallyExclusive("as", "prefix")
 	_ = cmd.RegisterFlagCompletionFunc("context", completeSourceContexts)
@@ -70,6 +77,10 @@ func runImport(a *app, files []string, opts importOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Snapshotted before the first merge so the report can name what this import
+	// orphaned rather than what the kubeconfig was already carrying.
+	orphansBefore := contexts.FindOrphans(cfg)
 
 	var result transfer.Result
 	for _, file := range files {
@@ -91,14 +102,39 @@ func runImport(a *app, files []string, opts importOptions) error {
 		result.Entries = append(result.Entries, partial.Entries...)
 	}
 
-	// Nothing is written when no context actually moved, which keeps a repeated
-	// import from rotating a backup generation for a no-op.
-	if !opts.dryRun && result.Changed() {
+	orphans := contexts.FindOrphans(cfg)
+	// Reported: only what this import left behind. A kubeconfig in use for a year
+	// usually carries a few unreferenced stanzas already, and blaming those on
+	// the command just run is how a note becomes noise people skip.
+	orphaned := orphans.Without(orphansBefore)
+
+	pruned := opts.prune && !opts.dryRun
+	if pruned {
+		// Removed: every unreferenced entry, the same as "kctx delete --prune".
+		// Scoping the removal to this import's leftovers would make the hint
+		// below a lie — by the time the user re-runs with --prune, the stanzas it
+		// named are no longer new, and the command would skip them.
+		contexts.PruneOrphans(cfg, orphans)
+	}
+
+	// Nothing is written when no context moved, which keeps a repeated import
+	// from rotating a backup generation for a no-op — but a prune that has
+	// something to remove is itself a change worth saving.
+	if !opts.dryRun && (result.Changed() || (pruned && !orphans.Empty())) {
 		if err := loader.Save(cfg, kubeconfig.WithBackup()); err != nil {
 			return err
 		}
 	}
-	return reportImport(a, result, opts.dryRun)
+	if err := reportImport(a, result, opts.dryRun); err != nil {
+		return err
+	}
+	if !orphaned.Empty() && !pruned {
+		// stderr, so the hint does not land in a "-o json" consumer's payload.
+		_, err := fmt.Fprintf(a.errOut, "note: %s are now unreferenced; re-run with --prune to remove them\n",
+			describeOrphans(orphaned))
+		return err
+	}
+	return nil
 }
 
 // reportImport renders the per-context table and the summary line.
