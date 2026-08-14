@@ -89,6 +89,53 @@ Deleting the current context clears `current-context` rather than silently promo
 
 <br/>
 
+## kctx import
+
+```bash
+kctx import ~/Downloads/kubeconfig.yaml       # every context in the file
+kctx import a.yaml b.yaml                     # several files at once
+kctx import k.yaml --context prod --as acme   # one context, under a new name
+kctx import k.yaml --prefix acme-             # namespace the whole file
+kctx import k.yaml --overwrite                # replace what is already there
+kctx import k.yaml --dry-run                  # report, change nothing
+```
+
+The named files are read on their own — `$KUBECONFIG` is not consulted for them — and every selected context is copied over with the cluster and user stanzas it references. Nothing is activated: `current-context` is left where it was, and `kctx ctx <name>` switches when you are ready.
+
+A context whose name is already taken is **refused**, not replaced. Import it under another name with `--prefix` or `--as`, or pass `--overwrite`. Re-importing a file whose contexts are already present is a no-op reported as `unchanged`, so the command is safe to repeat:
+
+```
+$ kctx import ~/Downloads/kubeconfig.yaml
+CONTEXT                      ACTION  CLUSTER       USER                SOURCE
+kubernetes-admin@kubernetes  added   kubernetes-2  kubernetes-admin-2
+Imported 1 context(s). Switch to one with kctx ctx <name>.
+```
+
+That `kubernetes-2` is the interesting part. Cluster and user names collide far more often than context names do — every kubeadm cluster calls its cluster `kubernetes` and its user `kubernetes-admin` — and `kubectl config view --flatten` resolves that by last-writer-wins, which silently repoints the contexts you already had at a different API server. `kctx import` never replaces a stanza whose contents differ: the incoming one is stored under a suffixed name and only the imported context is pointed at it. A stanza that is byte-for-byte the one already there is reused rather than copied, so importing five contexts that share a cluster does not leave five copies of it behind.
+
+The kubeconfig is backed up first, and the write lands in your own kubeconfig — never back in the file you imported from.
+
+<br/>
+
+## kctx export
+
+```bash
+kctx export                          # the current context, to stdout
+kctx export prod                     # one named context
+kctx export dev prod                 # several
+kctx export --all -f backup.yaml     # everything, to a file
+kctx export prod --flatten -f p.yaml # portable: certificates inlined
+kctx export prod -o json             # the same document as JSON
+```
+
+Writes a standalone kubeconfig holding only the named contexts and the cluster and user stanzas they actually reference — the smallest file that still works. `current-context` is set to the exported context, or kept as it was when it survived the extraction, because a kubeconfig without one is a file `kubectl` refuses to use.
+
+`--flatten` inlines the certificates and keys the contexts point at. Without it the export refers to paths that exist only on this machine, which is fine for a backup and useless for handing to someone else.
+
+The output carries credentials, and the command treats it that way. A file is written `0600`, an existing file is never replaced without `--force`, and a context guarded with `confirm: true` asks before it is exported — handing over a kubeconfig is handing over a route to the cluster. The question goes to stderr, so `kctx export prod > prod.yaml` never ends up with a prompt at the top of the file.
+
+<br/>
+
 ## kctx alias
 
 ```bash

@@ -1,6 +1,7 @@
 package kubeconfig
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -321,5 +322,122 @@ func TestBackupWithUnwritableStateDir(t *testing.T) {
 
 	if err := New("").Backup(); err == nil {
 		t.Error("expected an error when the backup directory cannot be created")
+	}
+}
+
+func TestReadFileIgnoresTheEnvironment(t *testing.T) {
+	files := fixture(t,
+		testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}},
+		testutil.Spec{Contexts: []testutil.Ctx{{Name: "prod"}}},
+	)
+
+	// Load() would merge both files; ReadFile has to see only the one it was
+	// given, or an import source would arrive already mixed with the config it
+	// is about to be merged into.
+	cfg, err := ReadFile(files[1])
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if len(cfg.Contexts) != 1 {
+		t.Errorf("contexts = %v, want only the ones in that file", cfg.Contexts)
+	}
+	if _, err := ReadFile(filepath.Join(filepath.Dir(files[0]), "absent")); err == nil {
+		t.Error("reading a file that is not there must fail")
+	}
+}
+
+func TestEncodeRoundTrips(t *testing.T) {
+	fixture(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+	cfg, err := New("").Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	yamlData, err := Encode(cfg)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	if !strings.Contains(string(yamlData), "current-context: dev") {
+		t.Errorf("YAML = %s", yamlData)
+	}
+
+	jsonData, err := EncodeJSON(cfg)
+	if err != nil {
+		t.Fatalf("EncodeJSON: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(jsonData, &doc); err != nil {
+		t.Fatalf("EncodeJSON produced invalid JSON: %v\n%s", err, jsonData)
+	}
+	if doc["current-context"] != "dev" {
+		t.Errorf("current-context = %v", doc["current-context"])
+	}
+}
+
+func TestFlattenInlinesReferencedFiles(t *testing.T) {
+	files := fixture(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+	ca := filepath.Join(filepath.Dir(files[0]), "ca.crt")
+	if err := os.WriteFile(ca, []byte("cert"), filePerm); err != nil {
+		t.Fatalf("write ca: %v", err)
+	}
+
+	l := New("")
+	cfg, err := l.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfg.Clusters["dev-cluster"].CertificateAuthority = "ca.crt"
+
+	if err := Flatten(cfg); err != nil {
+		t.Fatalf("Flatten: %v", err)
+	}
+	if got := string(cfg.Clusters["dev-cluster"].CertificateAuthorityData); got != "cert" {
+		t.Errorf("CertificateAuthorityData = %q, want the file contents", got)
+	}
+
+	// A path that resolves to nothing has to fail loudly: the point of
+	// flattening is a file that works somewhere else.
+	cfg.Clusters["dev-cluster"].CertificateAuthorityData = nil
+	cfg.Clusters["dev-cluster"].CertificateAuthority = "absent.crt"
+	if err := Flatten(cfg); err == nil {
+		t.Error("flattening a missing certificate must fail")
+	}
+}
+
+func TestWriteFileRefusesToClobber(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "exported.yaml")
+
+	if err := WriteFile(path, []byte("first"), false); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != filePerm {
+		t.Errorf("mode = %v, want %v", perm, os.FileMode(filePerm))
+	}
+
+	err = WriteFile(path, []byte("second"), false)
+	if err == nil {
+		t.Fatal("an existing file must not be replaced")
+	}
+	if !strings.Contains(err.Error(), "--force") {
+		t.Errorf("error = %v, want it to name the flag that allows it", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "first" {
+		t.Errorf("contents = %q, want the original", data)
+	}
+
+	if err := WriteFile(path, []byte("second"), true); err != nil {
+		t.Fatalf("WriteFile with overwrite: %v", err)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "second" {
+		t.Errorf("contents = %q, want the replacement", data)
+	}
+
+	// A path whose directory does not exist is the other way this fails.
+	if err := WriteFile(filepath.Join(path, "nested"), []byte("x"), false); err == nil {
+		t.Error("writing under a non-directory must fail")
 	}
 }

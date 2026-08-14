@@ -116,6 +116,42 @@ The kubeconfig is backed up before the delete; `$XDG_STATE_HOME/kube-ctx/backups
 
 <br/>
 
+## Take on a kubeconfig someone sent you
+
+```bash
+$ kctx import ~/Downloads/acme.yaml --dry-run
+CONTEXT                      ACTION  CLUSTER       USER                SOURCE
+kubernetes-admin@kubernetes  added   kubernetes-2  kubernetes-admin-2
+Would import 1 context(s). Switch to one with kctx ctx <name>.
+
+$ kctx import ~/Downloads/acme.yaml --context kubernetes-admin@kubernetes --as acme
+CONTEXT  ACTION  CLUSTER       USER                SOURCE
+acme     added   kubernetes-2  kubernetes-admin-2  kubernetes-admin@kubernetes
+Imported 1 context(s). Switch to one with kctx ctx <name>.
+
+$ kctx ctx acme
+Switched to context acme (namespace default).
+```
+
+The suffix on `kubernetes-2` is the collision being handled rather than ignored: the cluster named `kubernetes` you already had still points where it always did. Run the same import again and every row reads `unchanged`.
+
+<br/>
+
+## Hand one context to someone else
+
+```bash
+$ kctx export prod --flatten -f prod.yaml
+Wrote 1 context(s) to prod.yaml (0600). It carries credentials.
+
+$ KUBECONFIG=prod.yaml kubectl get nodes     # works on any machine
+
+$ kctx export --all -f backup.yaml           # or take the lot
+```
+
+Without `--flatten` the export still names certificate paths from this machine — fine for a backup, useless for someone else. An existing file is never replaced without `--force`.
+
+<br/>
+
 ## Short names
 
 ```bash

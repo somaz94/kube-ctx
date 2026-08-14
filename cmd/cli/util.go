@@ -112,6 +112,18 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), d)
 }
 
+// promptingOnStderr returns a view of the app whose questions and notices go to
+// stderr instead of stdout.
+//
+// Only the commands whose payload *is* stdout need it, and they need it badly:
+// "kctx export prod > prod.yaml" with a guard prompt on stdout writes the
+// question into prod.yaml and leaves the user staring at a silent terminal.
+func promptingOnStderr(a *app) *app {
+	redirected := *a
+	redirected.out = a.errOut
+	return &redirected
+}
+
 // confirm asks a yes/no question, defaulting to no. It returns true
 // immediately when --yes was given.
 func confirm(a *app, question string) (bool, error) {

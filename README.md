@@ -29,6 +29,8 @@
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
 | **Namespace list offline** | Fails when the API server is unreachable | Falls back to a cache and says so |
 | **Cluster health** | — | `kctx doctor`: reachability, version, expired certs and tokens |
+| **Adding someone's kubeconfig** | Hand-merge, or `--flatten` and hope the names do not clash | `kctx import`: colliding stanzas are disambiguated, never overwritten |
+| **Handing one context over** | Edit a copy by hand | `kctx export prod --flatten -f prod.yaml` |
 | **kubeconfig writes** | Re-emits the YAML | `clientcmd`, the same path `kubectl` uses — multi-file `$KUBECONFIG` safe |
 | **Backups** | — | Automatic before every destructive kubeconfig edit |
 | **Binaries** | Two | One |
@@ -122,6 +124,8 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx list [--wide]` | Table of every context, with guard badges |
 | `kctx rename <old> <new>` | Rename a context (`.` = current) |
 | `kctx delete <name>... [--prune]` | Delete contexts, optionally their orphaned cluster/user entries |
+| `kctx import <file>...` | Merge contexts from another kubeconfig, without colliding |
+| `kctx export [name]... [-f file]` | Write contexts out as a standalone kubeconfig |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
 | `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
@@ -167,6 +171,30 @@ kctx guard list
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for every field.
+
+<br/>
+
+## Taking on another kubeconfig
+
+Someone sends you a kubeconfig. The usual answer is `KUBECONFIG=a:b kubectl config view --flatten > merged`, and it has a trap: every kubeadm cluster calls its cluster `kubernetes` and its user `kubernetes-admin`, so the merge resolves the collision by last-writer-wins and quietly repoints the contexts you already had at a different API server. You find out later, from the wrong cluster.
+
+```bash
+$ kctx import ~/Downloads/kubeconfig.yaml
+CONTEXT                      ACTION  CLUSTER       USER                SOURCE
+kubernetes-admin@kubernetes  added   kubernetes-2  kubernetes-admin-2
+Imported 1 context(s). Switch to one with kctx ctx <name>.
+```
+
+A stanza whose contents differ is never replaced — the incoming one lands under a name of its own and only the imported context points at it. A stanza identical to one already there is reused rather than duplicated, so re-running an import is a no-op instead of a pile of copies. Colliding *context* names are refused outright until you say what to do about them (`--prefix`, `--as`, `--overwrite`), and `--dry-run` shows the whole plan first.
+
+The other direction hands one context to someone else, or takes a backup:
+
+```bash
+kctx export prod --flatten -f prod.yaml   # certificates inlined, so it works elsewhere
+kctx export --all -f backup.yaml          # everything
+```
+
+Exports are written `0600`, never overwrite a file without `--force`, and a `confirm` guard applies — handing over a kubeconfig is handing over a route to the cluster. See [Usage](docs/USAGE.md#kctx-import).
 
 <br/>
 

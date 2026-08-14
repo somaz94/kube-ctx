@@ -534,6 +534,51 @@ check_edits() {
   assert_status 0 "the kubeconfig is still usable after the edits"
 }
 
+check_transfer() {
+  section "Importing and exporting kubeconfigs"
+
+  local exported="$WORK/exported.yaml"
+
+  capture kctx export "$LIVE" --flatten -f "$exported"
+  assert_status 0 "export writes a standalone kubeconfig"
+
+  # The whole point of an export is that something else can use it. Only a real
+  # kubectl against a real cluster proves --flatten inlined what it had to:
+  # unit tests see a file that still resolves because the source paths are there.
+  assert_eq "$LIVE" "$(KUBECONFIG="$exported" kubectl config current-context 2>/dev/null || true)" \
+    "kubectl reads the export back"
+
+  capture env KUBECONFIG="$exported" kubectl get --raw /version
+  assert_status 0 "the exported kubeconfig still reaches the cluster on its own"
+
+  # It carries a token or a client key, so nothing else may read it. "-perm 600"
+  # is an exact match on both BSD and GNU find, which is why this is not an
+  # "ls -l" plus cut.
+  if [ -n "$(find "$exported" -perm 600 2>/dev/null)" ]; then
+    pass "the export is not readable by anyone else"
+  else
+    fail "the export is not readable by anyone else" "expected mode 0600"
+  fi
+
+  capture kctx export "$LIVE" -f "$exported"
+  assert_status 1 "an existing file is not replaced without --force"
+
+  capture kctx import "$exported" --as imported-e2e
+  assert_status 0 "import merges the file back in"
+  case " $(context_names) " in
+  *" imported-e2e "*) pass "kubectl reads back the imported context" ;;
+  *) fail "kubectl reads back the imported context" "context list: $(context_names)" ;;
+  esac
+
+  capture kctx doctor imported-e2e --timeout 10s
+  assert_status 0 "the imported context reaches the cluster"
+
+  # Everything it needed is already there, so a second run has nothing to do —
+  # and must not leave a second copy of the cluster behind.
+  capture kctx import "$exported" --as imported-e2e
+  assert_contains "unchanged" "re-importing the same file changes nothing"
+}
+
 # --- main --------------------------------------------------------------------
 
 main() {
@@ -549,6 +594,7 @@ main() {
   check_guard
   check_alias
   check_edits
+  check_transfer
 
   printf "\n${BOLD}%d passed, %d failed, %d skipped${RESET}\n" "$PASSED" "$FAILED" "$SKIPPED"
   if [ "$FAILED" -gt 0 ]; then

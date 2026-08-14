@@ -28,10 +28,11 @@ make e2e-cluster-clean
 ```
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
-                         alias, guard, current, doctor, shell, exec, init,
-                         version
+                         import, export, alias, guard, current, doctor, shell,
+                         exec, init, version
                          (+ util, pick, session helpers)
-pkg/kubeconfig/          clientcmd-backed load / save / backup
+pkg/kubeconfig/          clientcmd-backed load / save / backup / encode
+pkg/transfer/            Merge and extract contexts between kubeconfigs
 pkg/contexts/            Context CRUD, switching, history stack
 pkg/namespaces/          Namespace listing (live API + cache)
 pkg/config/              kube-ctx's own config.yaml: aliases, guard rules
@@ -70,6 +71,24 @@ without asking — they are the release pipeline.
   land back in the file each stanza came from. Never re-emit the YAML by hand.
 - **Backups** — `Save(cfg, WithBackup())` snapshots every kubeconfig file first.
   Used by destructive edits (rename, delete) only; a plain switch skips it.
+- **Transfer** (`pkg/transfer`) — `Merge` for `import`, `Extract` for `export`,
+  both in memory. Three things there are non-obvious. A colliding cluster or
+  user stanza is never replaced when its contents differ — that is how
+  `kubectl config view --flatten` silently repoints existing contexts at another
+  API server — but one that *is* identical is reused, or importing five contexts
+  that share a cluster leaves five copies. Comparison zeroes
+  `LocationOfOrigin` first: clientcmd stamps every stanza with its file, so a
+  raw `DeepEqual` never matches and every re-import would look like a conflict.
+  And an imported stanza has that field *cleared*, because `ModifyConfig` routes
+  a write by it — left set, the import is written back into the file it came
+  from. `Extract` keeps it, since it is what resolves a relative certificate
+  path for `--flatten`. Merge works on a `DeepCopy` and commits at the end, so a
+  refused collision leaves the config untouched rather than half-imported.
+- **Prompts vs payload** (`promptingOnStderr`, `cmd/cli/util.go`) — `export`
+  writes a kubeconfig to stdout, so its guard prompt has to go to stderr;
+  otherwise `kctx export prod > prod.yaml` puts the question in the file and
+  leaves the user at a silent terminal. Every other command's prompt stays on
+  stdout, where its tests and docs expect it.
 - **History** (`pkg/contexts`) — a stack of contexts switched away from, backing
   `ctx -` and `ctx -N`. Scoped per shell when `KUBE_CTX_SHELL_ID` is set, and
   namespace history is additionally scoped per context.

@@ -128,6 +128,8 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newListCmd(a),
 		newRenameCmd(a),
 		newDeleteCmd(a),
+		newImportCmd(a),
+		newExportCmd(a),
 		newAliasCmd(a),
 		newGuardCmd(a),
 		newDoctorCmd(a),
