@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased (2026-08-14)
+## [v0.3.0](https://github.com/somaz94/kube-ctx/compare/v0.2.0...v0.3.0) (2026-08-14)
 
 ### Features
 
