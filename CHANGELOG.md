@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased (2026-08-14)
+## [v0.1.0](https://github.com/somaz94/kube-ctx/releases/tag/v0.1.0) (2026-08-14)
 
 ### Features
 
@@ -10,6 +10,11 @@ All notable changes to this project will be documented in this file.
 - add production guards and doctor health check ([b0e708a](https://github.com/somaz94/kube-ctx/commit/b0e708af47447ae912ce3674a7c3e984d5f2fb8e))
 - add built-in fuzzy picker for context and namespace selection ([1bc397b](https://github.com/somaz94/kube-ctx/commit/1bc397b3e4f0e704ebb491b3e1dc203ff31e08f3))
 - add context and namespace switching with history, aliases and backups ([ea79af1](https://github.com/somaz94/kube-ctx/commit/ea79af14e2df5c8ca01d75f8d60258f7a2a70338))
+
+### Bug Fixes
+
+- stop leaking session files, losing exit codes and ignoring cancellation ([07171ac](https://github.com/somaz94/kube-ctx/commit/07171ac08902fac426f2151eedcfc1fc7e0d1dec))
+- write shell exports in the calling shell's syntax and refuse throwaway edits ([d53c8bf](https://github.com/somaz94/kube-ctx/commit/d53c8bf913519273a34771feac75269dd9402a1c))
 
 ### Documentation
 
@@ -26,6 +31,7 @@ All notable changes to this project will be documented in this file.
 
 ### Continuous Integration
 
+- enforce golangci-lint and adopt the shared community workflows ([17b9c0b](https://github.com/somaz94/kube-ctx/commit/17b9c0b9751db6e1ddf11510fd8f2b5b96e922f2))
 - add goreleaser release pipeline with homebrew tap and scoop bucket ([52ce53d](https://github.com/somaz94/kube-ctx/commit/52ce53d17c12b20938058b4403a9e10be2e98791))
 
 ### Contributors
