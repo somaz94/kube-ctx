@@ -3,11 +3,35 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
+
+// invokedName returns the name kube-ctx was called as. The hook defines a shell
+// function under it and calls back through it, so it has to be a name the
+// caller's $PATH resolves.
+//
+// argv[0] rather than os.Executable(): on Linux the latter reads
+// /proc/self/exe, which resolves symlinks. krew installs a plugin as a symlink
+// named kubectl-<plugin> pointing into its own store, and puts only that
+// symlink on $PATH — so the resolved path carries the store's filename and the
+// hook would define a function nothing can call. macOS keeps the symlink and
+// happens to be fine, which is exactly how this would have shipped broken on
+// the platform most kubectl users are on.
+//
+// A variable so tests can pin it; under `go test` argv[0] is the test binary.
+var invokedName = func() string {
+	if len(os.Args) > 0 && os.Args[0] != "" {
+		return filepath.Base(os.Args[0])
+	}
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return filepath.Base(exe)
+	}
+	return "kctx"
+}
 
 // newInitCmd prints the shell integration snippet.
 func newInitCmd(a *app) *cobra.Command {
@@ -47,12 +71,7 @@ func runInit(a *app, cmd *cobra.Command, name string, noCompletion bool) error {
 		return err
 	}
 
-	binary, err := os.Executable()
-	if err != nil || binary == "" {
-		binary = "kctx"
-	}
-
-	if _, err := fmt.Fprintln(a.out, shellenv.Hook(sh, binary)); err != nil {
+	if _, err := fmt.Fprintln(a.out, shellenv.Hook(sh, invokedName())); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(a.out, shellenv.PromptHint(sh)); err != nil {
