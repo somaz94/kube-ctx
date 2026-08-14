@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.5.0](https://github.com/somaz94/kube-ctx/compare/v0.4.0...v0.5.0) (2026-08-14)
+
+### Features
+
+- add kctx sessions and keep a live session from being swept ([58ac5b8](https://github.com/somaz94/kube-ctx/commit/58ac5b8087a0a85401327587d5324ade18c047d6))
+- bind a directory to a context and switch on entering it ([817f0c9](https://github.com/somaz94/kube-ctx/commit/817f0c98741c3bc36ce468c219478e940a344ebc))
+- run one command against many contexts with kctx exec --all ([ec918ee](https://github.com/somaz94/kube-ctx/commit/ec918ee159271be2d77a998381fd06ec1f132d74))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.4.0](https://github.com/somaz94/kube-ctx/compare/v0.3.0...v0.4.0) (2026-08-14)
 
 ### Features
