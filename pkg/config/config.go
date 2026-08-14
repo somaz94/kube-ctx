@@ -73,19 +73,19 @@ const (
 // in front of the safety feature.
 type Guard struct {
 	// Match is a regular expression tested against the context name.
-	Match string `yaml:"match,omitempty"`
+	Match string `yaml:"match,omitempty" json:"match,omitempty"`
 	// Contexts is an exact list of context names this rule applies to.
-	Contexts []string `yaml:"contexts,omitempty"`
+	Contexts []string `yaml:"contexts,omitempty" json:"contexts,omitempty"`
 	// Prefix matches context names that start with it.
-	Prefix string `yaml:"prefix,omitempty"`
+	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
 	// Suffix matches context names that end with it.
-	Suffix string `yaml:"suffix,omitempty"`
+	Suffix string `yaml:"suffix,omitempty" json:"suffix,omitempty"`
 	// Level is safe, warn, or danger.
-	Level Level `yaml:"level"`
+	Level Level `yaml:"level" json:"level"`
 	// Confirm requires the user to retype the context name before switching.
-	Confirm bool `yaml:"confirm"`
+	Confirm bool `yaml:"confirm" json:"confirm"`
 	// Label overrides the badge text shown next to a matching context.
-	Label string `yaml:"label,omitempty"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
 }
 
 // Matchers returns the names of the matcher fields this rule sets.
@@ -297,8 +297,8 @@ func (c *Config) DeleteAlias(alias string) error {
 
 // AliasPair is one alias-to-context mapping.
 type AliasPair struct {
-	Alias  string
-	Target string
+	Alias  string `json:"alias" yaml:"alias"`
+	Target string `json:"target" yaml:"target"`
 }
 
 // AliasList returns every alias sorted by name.

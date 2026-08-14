@@ -124,6 +124,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 	root.AddCommand(
 		newCtxCmd(a),
 		newNsCmd(a),
+		newCurrentCmd(a),
 		newListCmd(a),
 		newRenameCmd(a),
 		newDeleteCmd(a),

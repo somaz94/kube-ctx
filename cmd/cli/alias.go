@@ -21,12 +21,36 @@ func newAliasCmd(a *app) *cobra.Command {
 			"anywhere a context name is accepted; prefix it with \"@\" to force the\n" +
 			"alias reading when a context of the same name also exists.",
 		Args: cobra.MaximumNArgs(2),
+		// The first argument is a new alias, so there is nothing to offer; the
+		// second is the context it points at.
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) != 1 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return contextCandidates(a, nil)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAlias(a, args, remove)
 		},
 	}
 	cmd.Flags().StringVarP(&remove, "delete", "d", "", "delete an alias")
+	_ = cmd.RegisterFlagCompletionFunc("delete", completeAliases(a))
 	return cmd
+}
+
+// completeAliases offers the aliases that currently exist.
+func completeAliases(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		userCfg, err := a.userConfig()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		var names []string
+		for _, pair := range userCfg.AliasList() {
+			names = append(names, pair.Alias+"\t→ "+pair.Target)
+		}
+		return names, cobra.ShellCompDirectiveNoFileComp
+	}
 }
 
 // runAlias lists, sets, or deletes an alias.
@@ -75,7 +99,8 @@ func runAlias(a *app, args []string, remove string) error {
 
 // listAliases prints the alias table.
 func listAliases(a *app, pairs []config.AliasPair) error {
-	if len(pairs) == 0 {
+	if len(pairs) == 0 && !a.jsonOutput() {
+		// Under -o json an empty list is a valid answer; the hint is for humans.
 		_, err := fmt.Fprintf(a.errOut, "No aliases defined. Add one with \"kctx alias p prod-cluster\".\n")
 		return err
 	}
@@ -84,5 +109,5 @@ func listAliases(a *app, pairs []config.AliasPair) error {
 	for _, p := range pairs {
 		rows = append(rows, []string{p.Alias, p.Target})
 	}
-	return renderTable(a, []string{"ALIAS", "CONTEXT"}, rows)
+	return renderOutput(a, []string{"ALIAS", "CONTEXT"}, rows, pairs)
 }

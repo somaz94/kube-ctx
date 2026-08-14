@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/somaz94/kube-ctx/pkg/config"
-	"github.com/somaz94/kube-ctx/pkg/contexts"
 	"github.com/somaz94/kube-ctx/pkg/guard"
 )
 
@@ -65,7 +64,7 @@ func newGuardAddCmd(a *app) *cobra.Command {
 			"  kctx guard add --prefix acme- --level warn\n" +
 			"  kctx guard add --match '^eks-.*-main$' --confirm",
 		Args:              cobra.ArbitraryArgs,
-		ValidArgsFunction: completeContexts(a),
+		ValidArgsFunction: completeContextList(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGuardAdd(a, args, guardSpec{
 				level:   level,
@@ -83,6 +82,9 @@ func newGuardAddCmd(a *app) *cobra.Command {
 	cmd.Flags().StringVar(&prefix, "prefix", "", "match context names starting with this")
 	cmd.Flags().StringVar(&suffix, "suffix", "", "match context names ending with this")
 	cmd.Flags().StringVar(&match, "match", "", "match context names against this regular expression")
+	_ = cmd.RegisterFlagCompletionFunc("level", cobra.FixedCompletions(
+		[]string{string(config.LevelSafe), string(config.LevelWarn), string(config.LevelDanger)},
+		cobra.ShellCompDirectiveNoFileComp))
 	return cmd
 }
 
@@ -93,9 +95,35 @@ func newGuardRemoveCmd(a *app) *cobra.Command {
 		Aliases: []string{"rm"},
 		Short:   "Remove the Nth guard rule, as numbered by \"kctx guard list\"",
 		Args:    cobra.ExactArgs(1),
+		// A bare index is exactly the kind of opaque argument completion is
+		// for: offering "2  cluster-7 → danger" saves running list first.
+		ValidArgsFunction: completeGuardPositions(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGuardRemove(a, args[0])
 		},
+	}
+}
+
+// completeGuardPositions offers each rule's number, described.
+func completeGuardPositions(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		userCfg, err := a.userConfig()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		guards := userCfg.Guards
+		if len(guards) == 0 {
+			guards = config.DefaultGuards()
+		}
+
+		out := make([]string, 0, len(guards))
+		for i, g := range guards {
+			out = append(out, fmt.Sprintf("%d\t%s → %s", i+1, g.Describe(), g.Level))
+		}
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
@@ -134,11 +162,11 @@ func runGuardList(a *app) error {
 			confirm,
 		})
 	}
-	if err := renderTable(a, []string{"#", "MATCH", "LEVEL", "CONFIRM"}, rows); err != nil {
+	if err := renderOutput(a, []string{"#", "MATCH", "LEVEL", "CONFIRM"}, rows, guards); err != nil {
 		return err
 	}
 
-	if !userCfg.HasGuards() {
+	if !userCfg.HasGuards() && !a.jsonOutput() {
 		_, err = fmt.Fprintf(a.errOut,
 			"\nThese are the built-in defaults; no rules are configured yet.\n"+
 				"Adding one writes them all to the config file, where they can be edited.\n")
@@ -176,16 +204,18 @@ func runGuardAdd(a *app, args []string, spec guardSpec) error {
 
 	// An exact name that matches no context is almost always a typo, and a
 	// guard rule that silently covers nothing is worse than no rule at all.
+	// Resolving also expands aliases, so guarding the context you made an alias
+	// for does not require spelling it out again.
 	if len(rule.Contexts) > 0 {
 		kubeCfg, err := a.loader().Load()
 		if err != nil {
 			return err
 		}
-		for _, name := range rule.Contexts {
-			if !contexts.Exists(kubeCfg, name) {
-				return fmt.Errorf("no context named %q", name)
-			}
+		resolved, err := resolveContexts(a, kubeCfg, rule.Contexts)
+		if err != nil {
+			return err
 		}
+		rule.Contexts = resolved
 	}
 
 	userCfg, err := a.userConfig()
