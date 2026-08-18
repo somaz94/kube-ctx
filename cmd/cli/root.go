@@ -49,6 +49,15 @@ type app struct {
 	// A pointer, so promptingOnStderr's copy of the app shares the position
 	// rather than restarting from a drained reader.
 	prompts *bufio.Reader
+
+	// compiled memoizes the guard rules for the life of one command.
+	//
+	// Building them reads and parses the config file and compiles every
+	// pattern, and the callers are per-item rather than per-command: a
+	// fan-out over 40 contexts asks twice per target to answer the guards and
+	// once more per result to badge the output. Nothing writes the config and
+	// then classifies within the same command, so one compile is enough.
+	compiled *guard.Classifier
 }
 
 // stdin returns the shared buffered reader, creating it on first use.
@@ -103,11 +112,19 @@ func validateOutput(format string) error {
 
 // classifier compiles the guard rules from the user's config.
 func (a *app) classifier() (*guard.Classifier, error) {
+	if a.compiled != nil {
+		return a.compiled, nil
+	}
 	userCfg, err := a.userConfig()
 	if err != nil {
 		return nil, err
 	}
-	return guard.New(userCfg.Guards)
+	compiled, err := guard.New(userCfg.Guards)
+	if err != nil {
+		return nil, err
+	}
+	a.compiled = compiled
+	return compiled, nil
 }
 
 // NewRootCmd builds the command tree writing to the given streams.
