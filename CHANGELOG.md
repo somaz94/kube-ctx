@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.6.0](https://github.com/somaz94/kube-ctx/compare/v0.5.0...v0.6.0) (2026-08-18)
+
+### Features
+
+- guard the namespaces inside a context, not just the context ([b2f132f](https://github.com/somaz94/kube-ctx/commit/b2f132f8f4b7aae1df9143b0edacbe8b2cf34002))
+
+### Bug Fixes
+
+- share one buffered reader so a second prompt is not read as a decline ([924302d](https://github.com/somaz94/kube-ctx/commit/924302d1843825525acf14b4e8f074c5e1ca51d3))
+
+### Performance Improvements
+
+- compile the guard rules once per command instead of per lookup ([0b4c71b](https://github.com/somaz94/kube-ctx/commit/0b4c71b14f5ebfa265ee31849bcb972734891d19))
+
+### Documentation
+
+- mention the namespace guard axis in the comparison table ([a63580c](https://github.com/somaz94/kube-ctx/commit/a63580c6caa71a33e39bbf3a059998f122450f30))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.5.0](https://github.com/somaz94/kube-ctx/compare/v0.4.0...v0.5.0) (2026-08-14)
 
 ### Features
