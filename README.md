@@ -24,7 +24,7 @@
 | | `kubectx` + `kubens` | `kctx` |
 |---|---|---|
 | **Scope of a switch** | Global — every terminal follows | Per-terminal via the shell hook or `kctx shell`, global otherwise |
-| **Production guard** | None | Contexts classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `shell` and `exec` alike |
+| **Production guard** | None | Contexts — and the namespaces inside them — classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `ns`, `shell` and `exec` alike |
 | **Context per project** | — | `kctx bind`: `cd` into a repo, this terminal follows |
 | **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency |
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
