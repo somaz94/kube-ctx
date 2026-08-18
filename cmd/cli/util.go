@@ -201,11 +201,13 @@ func trimError(msg string, max int) string {
 	return string(runes[:max-1]) + "…"
 }
 
-// contextCell renders a context name for a table, bolding the current one.
+// boldIfCurrent marks the name the user is presently on.
 //
-// Shared rather than inlined per command: five tables had their own copy, and
-// a sixth that forgot would silently stop marking where the user is.
-func contextCell(pal render.Palette, name, current string) string {
+// Shared rather than inlined per command: five listings had their own copy,
+// and a sixth that forgot would silently stop marking where the user is. Used
+// for namespaces as well as contexts, hence the name — the question is only
+// ever "is this the one".
+func boldIfCurrent(pal render.Palette, name, current string) string {
 	if name == current {
 		return pal.Bold(name)
 	}

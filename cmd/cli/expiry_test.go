@@ -97,17 +97,59 @@ func TestExpiryReportsTheAlreadyExpired(t *testing.T) {
 	}
 }
 
-// A report that goes quiet because it could not look is worse than no report.
-func TestExpiryNamesWhatItCouldNotRead(t *testing.T) {
+// The secrets list is cluster-wide and issued once, so a refusal reads zero
+// certificates. Reporting that as a clean run is the same silence as exiting 0
+// on an unreachable cluster.
+func TestExpiryTreatsARefusedSecretsListAsUnknown(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	fixedNow(t)
-	stubExpiry(t, nil, []string{"secrets"})
+	stubExpiry(t, nil, []string{expiry.SkippedSecrets})
+
+	err := h.run("expiry", "dev")
+	if code := ExitCode(err); code != ExitUnhealthy {
+		t.Fatalf("ExitCode = %d, want %d; nothing at all was read", code, ExitUnhealthy)
+	}
+	if !strings.Contains(h.stderr(), "could not read secrets") {
+		t.Errorf("stderr = %q, want it to name what could not be read", h.stderr())
+	}
+}
+
+// A cert-manager problem costs only the "who renews this" column, so it stays
+// a warning rather than taking the exit status with it.
+func TestExpiryOverlayFailureIsNotUnknown(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindTLSSecret, Name: "tls", NotAfter: now.AddDate(1, 0, 0)},
+		},
+	}, []string{"certificates.cert-manager.io: context deadline exceeded"})
 
 	if err := h.run("expiry", "dev"); err != nil {
-		t.Fatalf("expiry: %v", err)
+		t.Fatalf("ExitCode = %d, want 0: every notAfter was read", ExitCode(err))
 	}
-	if !strings.Contains(h.stderr(), "not allowed to read secrets") {
-		t.Errorf("stderr = %q, want the partial-read warning", h.stderr())
+	// The reason travels, or a timeout reads as a permission problem.
+	if !strings.Contains(h.stderr(), "deadline exceeded") {
+		t.Errorf("stderr = %q, want the real reason", h.stderr())
+	}
+}
+
+// cert-manager meant to renew and the date went by. Rendered as a plain
+// countdown it is indistinguishable from a certificate nobody automated.
+func TestExpiryMarksAnOverdueRenewal(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	overdue := now.AddDate(0, 0, -2)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindCertificate, Name: "stuck", NotAfter: now.AddDate(0, 0, 3),
+				Issuer: "letsencrypt", RenewalTime: &overdue},
+		},
+	}, nil)
+
+	_ = h.run("expiry", "dev")
+	if !strings.Contains(h.stdout(), "(auto, overdue)") {
+		t.Errorf("stdout = %q, want the failed renewal called out", h.stdout())
 	}
 }
 

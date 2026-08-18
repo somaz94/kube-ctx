@@ -308,21 +308,23 @@ The `IN` cell says how much time is left and how much of a problem that is:
 | Cell | Meaning |
 |---|---|
 | `10d (auto)` | dimmed — cert-manager is going to renew this one |
+| `3d (auto, overdue)` | red — cert-manager meant to renew it and the date went by |
 | `5d` | red — under a week, and nothing is going to fix it for you |
 | `19d` | yellow — inside the window, unmanaged |
 | `expired` | red — already past `notAfter` |
 
-A managed certificate is dimmed rather than colored because cert-manager renewing next Tuesday is not something anyone has to do, and a report where every row is red is one nobody reads twice. Already-expired certificates are kept rather than filtered out as past: they are the most urgent rows on the page, and hiding them would make the report go quiet exactly when the outage starts.
+A managed certificate is dimmed rather than colored because cert-manager renewing next Tuesday is not something anyone has to do, and a report where every row is red is one nobody reads twice. It is dimmed only while its own `renewalTime` is still ahead of it, though: renewals fail — a broken DNS-01 solver, an ACME rate limit, an issuer that was deleted — and a renewal date that has passed with the certificate still sitting there is the most urgent row on the page, not the quietest. `(auto, overdue)` says which one you are looking at, because "cert-manager tried and failed" and "nobody ever automated this" need different fixes. Already-expired certificates are kept rather than filtered out as past: they are the most urgent rows on the page, and hiding them would make the report go quiet exactly when the outage starts.
 
-A credential that is not allowed to list secrets does not fail the sweep. The context is still reported, and stderr names what could not be read:
+When something could not be read, stderr names it and the context still appears in the table, so a quiet report is never mistaken for a clean one:
 
 ```
-warning: prod-eks: not allowed to read secrets, so this context is only partly checked
+warning: prod-eks: could not read secrets, so this context was not fully checked
+warning: dev-kind: could not read certificates.cert-manager.io: context deadline exceeded, so this context was not fully checked
 ```
 
-Partial beats silent — the same call `kctx ns` makes when it prefers a stale cache to an empty list, because a report that refuses to say anything because it cannot say everything is one people stop running. A missing cert-manager CRD is *not* reported as a gap: the secrets already carry every `notAfter`, so nothing was missed.
+The two are not equally serious, and the exit status knows the difference. The secret list is issued once and cluster-wide, so a credential refused it read **nothing** — that context has established no more than an unreachable one, and it exits `2`. A cert-manager failure costs only the "who renews this" column, because every `notAfter` was already read from the secrets; the warning is printed and the exit status is left alone. A missing cert-manager CRD is not reported at all, for the same reason — nothing was missed.
 
-Exits `2` when anything falls inside the window — the same code `doctor` uses for "the clusters answered and something needs doing", distinct from `1`, which is kube-ctx failing to run at all. It also exits `2` when a context could not be read at all, because a sweep that reached nothing has not established that nothing is wrong there, and a gate that goes quiet when every cluster is unreachable is worse than no gate. That is what makes it usable as a cron gate:
+Exits `2` when anything falls inside the window — the same code `doctor` uses for "the clusters answered and something needs doing", distinct from `1`, which is kube-ctx failing to run at all. It also exits `2` when a context could not be read at all — unreachable, or refused the secret list — because a sweep that reached nothing has not established that nothing is wrong there, and a gate that goes quiet when every cluster is unreachable is worse than no gate. That is what makes it usable as a cron gate:
 
 ```bash
 kctx expiry --days 30 || notify-oncall

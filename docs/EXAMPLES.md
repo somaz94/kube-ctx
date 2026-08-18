@@ -185,10 +185,10 @@ CONTEXT   NAMESPACE  KIND         NAME          IN
 prod-eks  istio      Certificate  gateway-cert  8d (auto)
 prod-eks  default    Secret/tls   legacy-api    19d
 staging   ingress    Secret/tls   wildcard      27d
-warning: dev-kind: not allowed to read secrets, so this context is only partly checked
+warning: dev-kind: could not read secrets, so this context was not fully checked
 ```
 
-Three rows and one of them is work. `gateway-cert` is dimmed and marked `(auto)` because cert-manager is going to renew it — it is here so you can see it was scheduled, not so you do something about it. The other two are plain TLS secrets nothing owns, and they are colored: red under a week, yellow above it. The warning is `dev-kind` answering with a credential that cannot list secrets; the context is still reported rather than dropped, so a quiet report is never mistaken for a clean one.
+Three rows and one of them is work. `gateway-cert` is dimmed and marked `(auto)` because cert-manager is going to renew it — it is here so you can see it was scheduled, not so you do something about it. The other two are plain TLS secrets nothing owns, and they are colored: red under a week, yellow above it. The warning is `dev-kind` answering with a credential that cannot list secrets. That reads nothing at all — the list is issued once, cluster-wide, with no namespaced fallback — so the context is reported rather than dropped, and it is enough on its own to exit `2`. A report that cannot see a cluster has not established that the cluster is fine.
 
 Nothing due is a success, and it says so on stderr — stdout stays empty for whatever is downstream:
 

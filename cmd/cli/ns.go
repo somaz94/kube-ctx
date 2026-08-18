@@ -162,7 +162,7 @@ func printNamespaces(a *app, names []string, current string) error {
 
 	pal := a.palette()
 	for _, name := range names {
-		line := contextCell(pal, name, current)
+		line := boldIfCurrent(pal, name, current)
 		if _, err := fmt.Fprintln(a.out, line); err != nil {
 			return err
 		}

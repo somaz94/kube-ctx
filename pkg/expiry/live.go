@@ -27,6 +27,13 @@ var certManagerCertificates = schema.GroupVersionResource{
 	Resource: "certificates",
 }
 
+// SkippedSecrets is what Live reports when it could not list secrets at all.
+//
+// Named rather than a bare string because the exit status keys on it: the list
+// is cluster-wide and all-or-nothing, so this means zero certificates were
+// read, not a partial answer.
+const SkippedSecrets = "secrets"
+
 // tlsSecretSelector is how the API server is asked for only the TLS secrets.
 //
 // Filtering server-side matters here: on a busy cluster the secret list is
@@ -51,11 +58,13 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
 	items, err := tlsSecrets(ctx, clientset)
 	switch {
 	case apierrors.IsForbidden(err):
-		// Partial beats silent, the same call pkg/namespaces makes when the
-		// cache is stale: a credential scoped to one namespace still tells the
-		// truth about that namespace, and a report that refuses to say
-		// anything because it cannot say everything gets ignored.
-		skipped = append(skipped, "secrets")
+		// Recorded, not tolerated. The list is cluster-wide and issued once,
+		// so a refusal reads zero certificates rather than some of them —
+		// there is no namespaced fallback to fall back to. It is reported
+		// rather than returned as an error only so the row still names the
+		// context and says why; Unknown treats it as "nothing was
+		// established", which is what it is.
+		skipped = append(skipped, SkippedSecrets)
 	case err != nil:
 		// Unauthorized belongs here, not above. Forbidden means authenticated
 		// and scoped, so what was read is true; 401 means nothing authenticated
@@ -76,11 +85,14 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
 		// secrets already carry every notAfter — so it is not reported as one.
 	case err != nil:
 		// Every other overlay failure — forbidden, a webhook down, the
-		// aggregated API returning 503 — costs only the "who renews this"
-		// column. Returning the error instead would throw away every notAfter
-		// already read, so a certificate expiring tomorrow would vanish
-		// because cert-manager was unhealthy.
-		skipped = append(skipped, "certificates.cert-manager.io")
+		// aggregated API returning 503, this context running out of deadline —
+		// costs only the "who renews this" column. Returning the error instead
+		// would throw away every notAfter already read, so a certificate
+		// expiring tomorrow would vanish because cert-manager was unhealthy.
+		//
+		// The reason travels with it: reported bare, a timeout reads as a
+		// permission problem and sends the operator to check RBAC.
+		skipped = append(skipped, "certificates.cert-manager.io: "+err.Error())
 	}
 
 	return merge(items, managed), skipped, nil

@@ -252,3 +252,47 @@ func TestCertNotAfterRejectsPEMWithNoCertificate(t *testing.T) {
 		t.Error("a PEM carrying no certificate was accepted")
 	}
 }
+
+// The command calls Within twice — once for what counts as due, once for what
+// --all shows. Result is copied but its Items slice header is not, so the two
+// filters must not be able to see or corrupt each other, or the exit status
+// would be decided on data the table never showed.
+func TestWithinCallsDoNotAliasEachOther(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	results := []Result{{Context: "a", Items: []Item{
+		{Name: "due", NotAfter: now.AddDate(0, 0, 5)},
+		{Name: "far", NotAfter: now.AddDate(3, 0, 0)},
+	}}}
+
+	due := Within(results, now, 30)
+	shown := Within(results, now, 200*365)
+
+	if len(due) != 1 || len(due[0].Items) != 1 || due[0].Items[0].Name != "due" {
+		t.Fatalf("the narrow filter was corrupted by the wide one: %+v", due)
+	}
+	if len(shown[0].Items) != 2 {
+		t.Fatalf("shown = %+v, want both certificates", shown[0].Items)
+	}
+	if len(results[0].Items) != 2 {
+		t.Fatalf("Within mutated its input: %+v", results[0].Items)
+	}
+}
+
+// A refused secrets list has established no more than an unreachable cluster
+// did, and the exit status has to say so.
+func TestUnknownCatchesARefusedSecretsList(t *testing.T) {
+	refused := []Result{{Context: "prod", Skipped: []string{SkippedSecrets}}}
+	if !Unknown(refused) {
+		t.Fatal("a refused secrets list did not register as unknown; the command would exit 0")
+	}
+
+	// The overlay is different: every notAfter was already read without it.
+	overlay := []Result{{
+		Context: "prod",
+		Items:   []Item{{Name: "tls"}},
+		Skipped: []string{"certificates.cert-manager.io: 503"},
+	}}
+	if Unknown(overlay) {
+		t.Error("a cert-manager failure took the exit status with it")
+	}
+}

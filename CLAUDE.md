@@ -175,19 +175,21 @@ without asking — they are the release pipeline.
   `kubernetes.io/tls` secret carries the PEM, so `notAfter` is readable with no
   CRD installed, and cert-manager `Certificate`s are folded on top keyed by the
   secret each writes — that is what says who renews it, and why a managed row
-  is renamed to the Certificate rather than the secret. Only the first PEM
-  block is parsed: a `tls.crt` carries intermediates that outlive the leaf, so
-  reading the last would call a dead certificate healthy for years. A
-  credential that cannot list secrets degrades to a partial report with the gap
-  named — the same call `pkg/namespaces` makes preferring a stale cache to an
-  empty list — while a missing cert-manager CRD is *not* a gap, since the
-  secrets already carry every `notAfter`. Two things gate the exit status, not
-  one: something due, *or* a context that could not be read — a sweep that
-  reached nothing has not established that nothing is wrong there, and
-  `kctx expiry || notify` going quiet when every cluster is unreachable is the
-  failure this command exists to prevent. For the same reason `--all` widens
-  only what is shown; letting it widen the threshold would exit 2 on any
-  cluster holding one TLS secret.
+  is renamed to the Certificate rather than the secret. The first *CERTIFICATE*
+  block is the leaf: a `tls.crt` carries intermediates that outlive it, so
+  reading the last would call a dead certificate healthy for years, and it can
+  lead with a preamble, so taking the first block of any type drops a readable
+  secret in silence. Two things gate the exit status, not one: something due,
+  *or* a context that could not be read — a sweep that reached nothing has not
+  established that nothing is wrong there, and `kctx expiry || notify` going
+  quiet when every cluster is unreachable is the failure this command exists to
+  prevent. The two ways of reading nothing are not equal and the status knows
+  it: the secret list is issued once, cluster-wide, with no namespaced
+  fallback, so a refused one read *nothing* and counts as unknown, while a
+  cert-manager failure costs only the "who renews this" column and leaves the
+  status alone — every `notAfter` was already in hand. For the same reason
+  `--all` widens only what is shown; letting it widen the threshold would exit
+  2 on any cluster holding one TLS secret.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
   sick cluster or expiry found something due, `130` the user declined.
   Distinct because the uses are shell one-liners: `&&` must not proceed past a declined guard, and `||` must not

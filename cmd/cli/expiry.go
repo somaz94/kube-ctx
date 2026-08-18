@@ -58,7 +58,7 @@ func newExpiryCmd(a *app) *cobra.Command {
 		},
 	}
 	cmd.Flags().IntVarP(&days, "days", "d", expiry.DefaultDays, "report certificates expiring within this many days")
-	cmd.Flags().BoolVar(&all, "all", false, "report every certificate, however far off")
+	cmd.Flags().BoolVar(&all, "all", false, "show every certificate expiring within 200 years")
 	cmd.Flags().DurationVar(&timeout, "timeout", expiry.DefaultTimeout, "per-cluster deadline")
 	cmd.Flags().IntVar(&concurrency, "concurrency", expiry.DefaultConcurrency, "how many clusters to read at once")
 	return cmd
@@ -126,7 +126,10 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 	// established that nothing is wrong there, and "kctx expiry || notify"
 	// going quiet when every cluster is unreachable is the failure mode this
 	// command exists to prevent.
-	if expiry.Expiring(due) || expiry.Unknown(shown) {
+	// Unknown reads the unfiltered results on purpose: it is a statement about
+	// what could be read, not about the window. Keyed to the display slice, a
+	// later display-side filter would silently take the cron gate with it.
+	if expiry.Expiring(due) || expiry.Unknown(results) {
 		// The same separation doctor makes: 2 is "the clusters answered and
 		// something needs doing", distinct from 1, which is kube-ctx failing
 		// to run at all. Silent, because the table already said what.
@@ -138,6 +141,11 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 // everything is the window --all uses. Deliberately absurd rather than
 // unbounded: Within takes a day count, and a second code path for "no filter"
 // would be one more thing to keep in step with the first.
+//
+// It is a real bound, not a synonym for infinity. A certificate carrying RFC
+// 5280's "no well-defined expiry" (9999-12-31) falls outside it, which is the
+// better failure: time.Duration saturates past ~292 years, so such a row would
+// render a nonsense day count if it were let through.
 const everything = 200 * 365
 
 // renderExpiryTable prints one row per expiring certificate.
@@ -156,14 +164,14 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 	for _, r := range results {
 		if r.Err != "" {
 			rows = append(rows, []string{
-				contextCell(pal, r.Context, current), "-", "-",
+				boldIfCurrent(pal, r.Context, current), "-", "-",
 				pal.Red("unreadable"), pal.Dim(trimError(r.Err, 40)),
 			})
 			continue
 		}
 		for _, item := range r.Items {
 			rows = append(rows, []string{
-				contextCell(pal, r.Context, current),
+				boldIfCurrent(pal, r.Context, current),
 				item.Namespace,
 				string(item.Kind),
 				item.Name,
@@ -197,6 +205,11 @@ func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	// the most urgent row on the page, not the quietest.
 	case item.Managed() && (item.RenewalTime == nil || item.RenewalTime.After(now)):
 		return pal.Dim(text + " (auto)")
+	case item.Managed():
+		// cert-manager meant to renew this and the date went by. Saying so is
+		// the point: rendered as a plain countdown it is indistinguishable
+		// from a certificate nobody ever automated, and the fix is different.
+		return pal.Red(text + " (auto, overdue)")
 	case left < 7*24*time.Hour:
 		return pal.Red(text)
 	default:
@@ -210,7 +223,7 @@ func reportSkipped(a *app, results []expiry.Result) error {
 	for _, r := range results {
 		for _, kind := range r.Skipped {
 			_, err := fmt.Fprintf(a.errOut,
-				"warning: %s: not allowed to read %s, so this context is only partly checked\n",
+				"warning: %s: could not read %s, so this context was not fully checked\n",
 				r.Context, kind)
 			if err != nil {
 				return err

@@ -251,6 +251,15 @@ func Unknown(results []Result) bool {
 		if r.Err != "" {
 			return true
 		}
+		for _, kind := range r.Skipped {
+			// A refused secrets list is not a partial answer: it is issued
+			// once, cluster-wide, so nothing at all came back. That has
+			// established no more than an unreachable cluster did, and
+			// reporting it as clean is the same silence in a different shape.
+			if kind == SkippedSecrets {
+				return true
+			}
+		}
 	}
 	return false
 }
