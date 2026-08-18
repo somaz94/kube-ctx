@@ -206,8 +206,12 @@ without asking — they are the release pipeline.
   that plainly exists. The root carries `--back` for the same reason:
   `normalizeArgs` already rewrote `-2` into `--back=2` before cobra saw it, so
   without the flag the root failed with "unknown flag" rather than walking
-  history. A name colliding with a subcommand loses to it — `kctx list` has to
-  keep listing — and `kctx ctx list` is the escape hatch.
+  history. That rewrite stops at `--`: past the terminator the argv is the
+  child's, where `-1` is an ordinary value, and rewriting it handed
+  `kctx exec dev -- kubectl logs --tail -1` a `--tail` of `--back=1` — a
+  shorthand only kube-ctx knows. A name colliding with a subcommand loses to
+  it — `kctx list` has to keep listing — and `kctx ctx list` is the escape
+  hatch.
 - **One resolver** (`cmd/cli/util.go`) — every command taking a context name
   goes through `resolveContext`: `.` expansion, alias, existence. Completion
   offers aliases everywhere, so a command that skipped it would suggest inputs

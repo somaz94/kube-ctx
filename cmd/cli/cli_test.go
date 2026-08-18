@@ -615,6 +615,24 @@ func TestNormalizeArgs(t *testing.T) {
 		{[]string{"ctx", "prod"}, []string{"ctx", "prod"}},
 		{[]string{"list", "--wide"}, []string{"list", "--wide"}},
 		{[]string{"ctx", "-o", "json"}, []string{"ctx", "-o", "json"}},
+		// Past the terminator the argv belongs to the child, and "-1" is an
+		// ordinary value there — kubectl's --tail takes it. Rewriting it fed
+		// the child a kube-ctx shorthand it has never heard of.
+		{
+			[]string{"exec", "dev", "--", "kubectl", "logs", "--tail", "-1"},
+			[]string{"exec", "dev", "--", "kubectl", "logs", "--tail", "-1"},
+		},
+		// The terminator does not have to be the last chance to use the
+		// shorthand: what comes before it is still kube-ctx's own argv.
+		{
+			[]string{"exec", "-2", "--", "sh", "-c", "echo -1"},
+			[]string{"exec", "--back=2", "--", "sh", "-c", "echo -1"},
+		},
+		// A second "--" is the child's, not another terminator.
+		{
+			[]string{"exec", "dev", "--", "git", "log", "--", "-1"},
+			[]string{"exec", "dev", "--", "git", "log", "--", "-1"},
+		},
 	}
 	for _, tt := range tests {
 		got := normalizeArgs(tt.in)

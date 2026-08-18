@@ -210,14 +210,23 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 // context history.
 var historyArgPattern = regexp.MustCompile(`^-([0-9]+)$`)
 
-// normalizeArgs rewrites "-N" into "--back=N".
+// normalizeArgs rewrites "-N" into "--back=N", up to the argument terminator.
 //
 // Cobra parses "-2" as an unknown shorthand flag and fails before the command
 // ever sees it, so the ergonomic form has to be translated first. A bare "-"
 // is left alone: it is not flag-shaped, and the commands accept it directly.
+//
+// Everything after the first "--" is copied verbatim, because it is not this
+// tool's argv at all — it is the child's. Rewriting there turned
+// "kctx exec dev -- kubectl logs --tail -1" into a --tail of "--back=1", which
+// is a shorthand only kube-ctx knows and the child then rejects. The terminator
+// is the boundary the shell already draws; kube-ctx has no business past it.
 func normalizeArgs(args []string) []string {
 	out := make([]string, 0, len(args))
-	for _, arg := range args {
+	for i, arg := range args {
+		if arg == "--" {
+			return append(out, args[i:]...)
+		}
 		if m := historyArgPattern.FindStringSubmatch(arg); m != nil {
 			out = append(out, "--back="+m[1])
 			continue
