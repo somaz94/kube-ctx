@@ -130,6 +130,7 @@ func (a *app) classifier() (*guard.Classifier, error) {
 // NewRootCmd builds the command tree writing to the given streams.
 func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 	a := &app{out: out, errOut: errOut, in: in}
+	var rootBack int
 
 	root := &cobra.Command{
 		Use:   "kctx",
@@ -150,11 +151,26 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		},
 		// Bare "kctx" is the most common thing to type, so it does what
 		// "kctx ctx" does: open the picker, or list when there is no terminal.
-		Args: cobra.NoArgs,
+		// A name goes straight through to the switch, which is the form
+		// kubectx trained everyone's fingers on — and until it did, "kctx
+		// staging" answered a context that plainly exists with "unknown
+		// command", the least useful thing it could have said.
+		//
+		// A name that collides with a subcommand loses to it: cobra resolves
+		// the tree before this runs. That is the right way round — "kctx list"
+		// must keep listing — and "kctx ctx list" is the escape hatch, the
+		// same shape as the "@" that forces the alias reading of a name.
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeContexts(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runCtx(a, nil, 0)
+			return runCtx(a, args, rootBack)
 		},
 	}
+	// "-" and "-N" walk back through history here too. normalizeArgs already
+	// rewrites "-N" into "--back=N" before cobra sees it, so without this flag
+	// the root answered "kctx -2" with "unknown flag: --back".
+	root.Flags().IntVarP(&rootBack, "back", "b", 0,
+		"switch to the Nth previous context (same as -N)")
 	root.SetOut(out)
 	root.SetErr(errOut)
 	root.SetIn(in)

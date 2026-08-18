@@ -783,3 +783,110 @@ func TestPickerWithNoItemsFallsBack(t *testing.T) {
 		t.Errorf("stderr = %q, want an explanation", h.stderr())
 	}
 }
+
+// kubectx trained everyone to type the context name straight after the tool,
+// and until this worked "kctx staging" answered a context that plainly exists
+// with "unknown command".
+func TestBareContextArgumentSwitches(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	if err := h.run("prod"); err != nil {
+		t.Fatalf("kctx prod: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "prod" {
+		t.Errorf("current = %q, want prod", got)
+	}
+	if !strings.Contains(h.stdout(), "Switched to context prod") {
+		t.Errorf("stdout = %q", h.stdout())
+	}
+}
+
+// The error a typo gets has to name the real problem. "unknown command" sent
+// the reader looking for a subcommand that was never the point.
+func TestBareContextArgumentReportsAnUnknownContext(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	err := h.run("prodd")
+	if err == nil || !strings.Contains(err.Error(), `no context named "prodd"`) {
+		t.Fatalf("err = %v, want it to name the missing context", err)
+	}
+}
+
+func TestBareContextArgumentAcceptsHistoryAndAliases(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	if err := h.run("alias", "p", "staging"); err != nil {
+		t.Fatalf("alias: %v", err)
+	}
+	if err := h.run("@p"); err != nil {
+		t.Fatalf("kctx @p: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "staging" {
+		t.Errorf("current = %q, want staging", got)
+	}
+
+	// "-" and "-N" walk history here too; without the root --back flag,
+	// normalizeArgs' rewrite left "kctx -2" saying "unknown flag: --back".
+	if err := h.run("-"); err != nil {
+		t.Fatalf("kctx -: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q, want dev", got)
+	}
+}
+
+// A guard is not optional just because the shorter form was used.
+func TestBareContextArgumentIsGuarded(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardConfirmConfig)
+	h.stdin("no\n")
+
+	err := h.run("prod")
+	if code := ExitCode(err); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q; a declined guard must change nothing", got)
+	}
+}
+
+// A context whose name is also a subcommand loses to the subcommand, because
+// "kctx list" must keep listing. The point of the test is that the escape
+// hatch works, not that the collision is resolved the other way.
+func TestSubcommandWinsOverACollidingContextName(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "list"}},
+	})
+
+	if err := h.run("list"); err != nil {
+		t.Fatalf("kctx list: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q; \"kctx list\" must list, not switch", got)
+	}
+
+	if err := h.run("ctx", "list"); err != nil {
+		t.Fatalf("kctx ctx list: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "list" {
+		t.Errorf("current = %q; \"kctx ctx list\" is the escape hatch", got)
+	}
+}
+
+// Bare "kctx" keeps doing what it did: the picker, or the list without a
+// terminal.
+func TestBareKctxStillListsWithoutATerminal(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	if err := h.run(); err != nil {
+		t.Fatalf("kctx: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q; bare kctx must not switch", got)
+	}
+	for _, name := range []string{"dev", "prod", "staging"} {
+		if !strings.Contains(h.stdout(), name) {
+			t.Errorf("stdout = %q, want it to list %s", h.stdout(), name)
+		}
+	}
+}

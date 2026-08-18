@@ -168,6 +168,14 @@ without asking — they are the release pipeline.
   sick cluster, `130` the user declined. Distinct because the uses are shell
   one-liners: `&&` must not proceed past a declined guard, and `||` must not
   page on a typo'd `--kubeconfig`.
+- **A bare name switches** (`NewRootCmd`, `cmd/cli/root.go`) — `kctx prod` is
+  `kctx ctx prod`, because that is what fingers trained on kubectx type first
+  and `Args: cobra.NoArgs` answered it with "unknown command" for a context
+  that plainly exists. The root carries `--back` for the same reason:
+  `normalizeArgs` already rewrote `-2` into `--back=2` before cobra saw it, so
+  without the flag the root failed with "unknown flag" rather than walking
+  history. A name colliding with a subcommand loses to it — `kctx list` has to
+  keep listing — and `kctx ctx list` is the escape hatch.
 - **One resolver** (`cmd/cli/util.go`) — every command taking a context name
   goes through `resolveContext`: `.` expansion, alias, existence. Completion
   offers aliases everywhere, so a command that skipped it would suggest inputs

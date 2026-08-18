@@ -536,6 +536,29 @@ check_bind() {
   assert_status 0 "... and the other one"
 }
 
+# The form kubectx trained everyone to type. Worth a real kubeconfig: the
+# assertion that matters is that a name reaches the switch while a subcommand
+# name still reaches the subcommand.
+check_bare_switch() {
+  section "A bare name switches, the way kubectx takes it"
+
+  capture kctx "$STAGING"
+  assert_status 0 "a bare context name switches"
+  assert_eq "$STAGING" "$(current_context)" "... and lands"
+
+  capture kctx -
+  assert_status 0 "a bare - walks back"
+  assert_eq "$LIVE" "$(current_context)" "... to the previous context"
+
+  capture kctx nosuchcontext
+  assert_status 1 "an unknown name is an error"
+  assert_contains "no context named" "... naming the context, not a subcommand"
+
+  capture kctx list
+  assert_status 0 "a subcommand still reaches the subcommand"
+  assert_eq "$LIVE" "$(current_context)" "... without switching"
+}
+
 check_guard() {
   section "Guards, on every route to a cluster"
 
@@ -862,6 +885,7 @@ main() {
   check_exec
   check_shell
   check_hook
+  check_bare_switch
   check_guard
   check_alias
   check_bind

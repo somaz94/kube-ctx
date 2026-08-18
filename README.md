@@ -107,8 +107,9 @@ eval "$(kctx init zsh)"     # bash: kctx init bash;  fish: kctx init fish | sour
 
 ```bash
 kctx                             # (via ctx) interactive picker
-kctx ctx prod-eks                # switch
-kctx ctx -                       # back to the previous context
+kctx prod-eks                    # switch, the way kubectx takes it
+kctx ctx prod-eks                # the same thing, spelled out
+kctx -                           # back to the previous context
 kctx ns kube-system              # namespace of the current context
 kctx list --wide                 # everything at a glance
 kctx doctor                      # what still works?
@@ -124,7 +125,8 @@ kctx shell prod-eks              # a subshell pinned to prod
 
 | Command | What it does |
 |---|---|
-| `kctx ctx [name\|-\|-N]` | Switch context. No argument opens the picker; `-` goes back |
+| `kctx [name\|-\|-N]` | Switch context. No argument opens the picker; `-` goes back |
+| `kctx ctx [name\|-\|-N]` | The same, spelled out — and the way to reach a context named like a subcommand |
 | `kctx ns [name\|-\|-N]` | Switch the namespace of the current context |
 | `kctx current [-n]` | Print the current context (or namespace) and exit — for prompts |
 | `kctx list [--wide]` | Table of every context, with guard badges |

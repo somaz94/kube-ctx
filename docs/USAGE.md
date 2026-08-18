@@ -23,11 +23,16 @@ Color turns itself off when stdout is not a terminal, so `kctx list | grep prod`
 kctx ctx                  # picker (list, when there is no terminal)
 kctx                      # the same thing — bare kctx is a shortcut for ctx
 kctx ctx prod-eks         # switch
+kctx prod-eks             # the same thing, the way kubectx takes it
 kctx ctx p                # switch via an alias
-kctx ctx -                # previous context
-kctx ctx -3               # three contexts back
+kctx -                    # previous context
+kctx -3                   # three contexts back
 kctx ctx --back 3         # identical, for scripts
 ```
+
+Everything `ctx` takes, the bare form takes too — a name, an alias, `-`, `-N`, and the guard that goes with them. It exists because it is what fingers trained on `kubectx` type first, and answering that with `unknown command` for a context that plainly exists helps nobody.
+
+The one case it cannot serve is a context whose name is also a subcommand: `kctx list` lists, because it has to. `kctx ctx list` is the way to switch to a context called `list`, the same shape as the `@` that forces the alias reading of a colliding name.
 
 `-N` is rewritten to `--back=N` before the flags are parsed — a bare `-3` would otherwise look like an unknown shorthand flag.
 
