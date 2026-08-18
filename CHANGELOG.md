@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.0](https://github.com/somaz94/kube-ctx/compare/v0.6.0...v0.7.0) (2026-08-18)
+
+### Features
+
+- report the certificates about to expire with kctx expiry ([ff09114](https://github.com/somaz94/kube-ctx/commit/ff09114a812378e9409650098addaa7f2d041f31))
+- switch on a bare context name, the way kubectx takes it ([1540257](https://github.com/somaz94/kube-ctx/commit/15402572e6866ec8146f0c78892a1a6a2eff1733))
+
+### Bug Fixes
+
+- put the expiry gate in a typed field, not a display string ([f08d7ab](https://github.com/somaz94/kube-ctx/commit/f08d7abff7123821e5b12997ac2029c8728fe0a0))
+- treat a refused secrets list as unknown, not a partial answer ([fc3538b](https://github.com/somaz94/kube-ctx/commit/fc3538bb0c10ccff74a6b3dc256506ddbd9d10d6))
+- exit non-zero when expiry could not read a cluster ([6bd633e](https://github.com/somaz94/kube-ctx/commit/6bd633e2ea3ffc3af21b03d345ecfb1d71e67a95))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.6.0](https://github.com/somaz94/kube-ctx/compare/v0.5.0...v0.6.0) (2026-08-18)
 
 ### Features
