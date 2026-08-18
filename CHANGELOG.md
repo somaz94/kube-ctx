@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.7.1](https://github.com/somaz94/kube-ctx/compare/v0.7.0...v0.7.1) (2026-08-18)
+
+### Bug Fixes
+
+- stop rewriting -N past the argument terminator ([a404adb](https://github.com/somaz94/kube-ctx/commit/a404adb44409dadac9854cb5b3126d2489befb5b))
+
+### Code Refactoring
+
+- put the expiry branches where a test can reach them ([c472f75](https://github.com/somaz94/kube-ctx/commit/c472f7529696638d09451f1e10b47ae8afad4cc0))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.7.0](https://github.com/somaz94/kube-ctx/compare/v0.6.0...v0.7.0) (2026-08-18)
 
 ### Features
