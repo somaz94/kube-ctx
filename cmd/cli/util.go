@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -185,7 +184,7 @@ func confirmPhrase(a *app, prompt, phrase string) (bool, error) {
 
 // readLine reads one line from the app's input stream.
 func readLine(a *app) (string, error) {
-	line, err := bufio.NewReader(a.in).ReadString('\n')
+	line, err := a.stdin().ReadString('\n')
 	if err != nil && line == "" {
 		// EOF on a closed or empty stdin means "no answer", which the callers
 		// treat as a decline rather than a failure.

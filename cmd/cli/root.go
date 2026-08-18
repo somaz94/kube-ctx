@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +36,27 @@ type app struct {
 	out    io.Writer
 	errOut io.Writer
 	in     io.Reader
+
+	// prompts buffers stdin across every question one command asks.
+	//
+	// A fresh bufio.Reader per prompt reads ahead and then throws away
+	// whatever it buffered past the first newline, so the second question of
+	// a command would always see EOF and read a decline. That is invisible at
+	// a terminal, which delivers one line per Read, and fatal to anything
+	// piping its answers in — and a command asking twice is now ordinary,
+	// since a guarded context and a guarded namespace are asked separately.
+	//
+	// A pointer, so promptingOnStderr's copy of the app shares the position
+	// rather than restarting from a drained reader.
+	prompts *bufio.Reader
+}
+
+// stdin returns the shared buffered reader, creating it on first use.
+func (a *app) stdin() *bufio.Reader {
+	if a.prompts == nil {
+		a.prompts = bufio.NewReader(a.in)
+	}
+	return a.prompts
 }
 
 // loader returns a kubeconfig loader honoring --kubeconfig.
