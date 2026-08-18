@@ -138,6 +138,32 @@ without asking — they are the release pipeline.
   `confirm` gates every route to a cluster — `ctx`, `shell` and `exec` all call
   `requireGuardConfirmation`; covering only `ctx` left `kctx exec prod -- ...`
   walking straight past the guard.
+- **The second guard axis** (`Guard.Namespaces`) — a rule listing namespaces
+  classifies those *inside* the contexts it matches and stops classifying the
+  context, because one rule has one `level` and the two verdicts differ: a
+  context worth badging is rarely worth prompting for, and `kube-system` is the
+  reverse. The classifier keeps the axes as separate lists so "first match
+  wins" stays answerable; interleaved, a namespace rule above a context rule
+  would look like it shadowed it. Such a rule may omit the context matcher —
+  the one exception to the no-matcher error, and only because the reasoning
+  behind that error does not reach it: a namespace list is already a matcher,
+  so the omitted half over-classifies nothing. `requireNamespaceGuardConfirmation`
+  sits beside the context check on `ctx`, `ns`, `shell` and `exec`, and guards
+  the *effective* namespace rather than the flag — a context whose own default
+  is `kube-system` would otherwise walk in unguarded, and `ctx` is on the list
+  because it runs nothing but decides where everything typed after it runs.
+  `bind --apply` refuses a namespace-guarded context for the same reason it
+  refuses a guarded one, which is also what keeps `ctx` being gated from
+  turning every `cd` into a prompt. Namespace names are trimmed on both the
+  read and the write path: pflag splits `-n "a, b"` without trimming, and a
+  rule keyed on `" b"` looks accepted and never fires — a guard failing open.
+- **One buffered stdin per command** (`app.prompts`, `cmd/cli/root.go`) — a
+  fresh `bufio.Reader` per prompt reads ahead and discards everything past the
+  first newline, so a second question always saw EOF and read a decline. A
+  terminal hides it by delivering one line per `Read`; piped answers do not,
+  and two questions in one command became ordinary once a guarded context and
+  a guarded namespace started being asked separately. It is a pointer so
+  `promptingOnStderr`'s copy shares the position.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
   sick cluster, `130` the user declined. Distinct because the uses are shell
   one-liners: `&&` must not proceed past a declined guard, and `||` must not

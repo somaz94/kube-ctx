@@ -34,7 +34,7 @@ A map of short name to context name. An alias is accepted anywhere a context nam
 
 ### guards
 
-A list of rules, tested against the context name in order — the first match wins.
+A list of rules, tested against the context name in order — the first match wins. Rules that list `namespaces:` are tested against namespaces instead, on a list of their own.
 
 | Field | Type | Description |
 |---|---|---|
@@ -42,11 +42,12 @@ A list of rules, tested against the context name in order — the first match wi
 | `contexts` | list | Exact context names this rule applies to |
 | `prefix` | string | Matches context names starting with it |
 | `suffix` | string | Matches context names ending with it |
+| `namespaces` | list | Exact namespace names; moves the whole rule onto the namespace axis |
 | `level` | `safe` \| `warn` \| `danger` | How dangerous the context is |
-| `confirm` | bool | Require retyping the exact context name before switching |
+| `confirm` | bool | Require retyping the guarded name — the context, or the namespace on a namespace rule |
 | `label` | string | Badge text; defaults to `DANGER` / `WARN` |
 
-A rule carries **exactly one** matcher. Two is an error rather than a precedence question: it is a typo, and silently honouring one of them is how a context nobody guarded ends up looking guarded. A rule with none is an error too — treating it as match-everything would classify a whole kubeconfig as production.
+A rule carries **exactly one** matcher. Two is an error rather than a precedence question: it is a typo, and silently honouring one of them is how a context nobody guarded ends up looking guarded. A rule with none is an error too — treating it as match-everything would classify a whole kubeconfig as production. The single exception is a rule that sets `namespaces`, which already carries a matcher of its own; see [Namespace rules](#namespace-rules).
 
 An unrecognized `level` is treated as `safe`. A typo downgrades a rule rather than silently promoting a context to dangerous.
 
@@ -71,6 +72,65 @@ guards:
 
 <br/>
 
+### Namespace rules
+
+A rule may also list `namespaces:`, and that moves the whole rule onto the other axis: it then classifies those namespaces *inside* the contexts it matches, and stops classifying the context itself.
+
+```yaml
+guards:
+  # kube-system in any production cluster requires retyping the namespace.
+  - prefix: prod-
+    namespaces: [kube-system, istio-system]
+    level: danger
+    confirm: true
+  # Switching to production itself is only badged, as before.
+  - prefix: prod-
+    level: danger
+```
+
+Those are two rules on purpose. **One rule cannot guard both a cluster and a namespace inside it**: `level`, `confirm` and `label` would have to mean two things at once, and the two verdicts genuinely differ — a context worth badging is rarely one worth prompting for, and `kube-system` is the reverse. Guard both by writing two rules.
+
+`namespaces` is **exact names, not a pattern**, which is the one place these rules do not offer a regex. It is the same reasoning as everywhere else, run backwards: context names lie, so the cluster that would hurt most is the one called `cluster-7` that no pattern over `prod` will ever find — while the namespaces worth guarding are the standard ones every cluster spells identically. `kube-system` is `kube-system` on every cluster you will ever touch.
+
+The context matcher may be **left out**, meaning every context, and this is the one exception to "a rule with no matcher is an error". That rule exists because a match-everything *context* rule would classify a whole kubeconfig as production; a namespace list is already a matcher, so an omitted context half over-classifies nothing — it guards `kube-system` and nothing else, everywhere, which is the most obvious rule anyone writes here. Demanding `match: '.*'` to say it would put a barrier in front of the safety feature:
+
+```yaml
+guards:
+  - namespaces: [kube-system]
+    level: danger
+    confirm: true
+```
+
+The two axes are **separate lists**, each keeping its own first-match-wins order, so a namespace rule sitting above a context rule does not shadow it — they are never competing for the same verdict. When a namespace rule does carry a context matcher, **both halves have to match**: `kube-system` in a kind cluster is not the `kube-system` a rule about production means.
+
+`confirm` gates **every route to the namespace** — `kctx ctx`, `kctx ns`, `kctx exec -n` and `kctx shell -n` — for exactly the reason the context guard covers every route to a cluster. One that only covered `kctx ns` would be walked straight past by `kctx exec prod -n kube-system -- kubectl delete deploy/api`. `kctx ctx` is on the list because it runs nothing but decides where everything typed after it runs: switch into a context whose default namespace is `kube-system` and the next bare `kubectl` is already there. `-y` skips it, and declining exits `130`.
+
+When the context is guarded too, the two are asked in turn and each wants its own name back — the context first, then the namespace. Neither answers for the other, because they are not the same decision.
+
+What gets guarded is the **effective** namespace, not just the one `-n` named. If the context's own default is already `kube-system`, then `kctx exec prod -- ...` prompts too — guarding only the flag would leave that route open, and it is the route someone who works in that namespace all day actually uses.
+
+The prompt asks you to retype the **namespace** rather than the context, since the namespace is what the rule is about, and it names both halves so it is clear which rule fired and how far it reaches. Both transcripts below run under the two-rule config at the top of this section, which is why the context carries a badge of its own:
+
+```console
+$ kctx exec prod-eks -n kube-system -- kubectl delete deploy/coredns
+! kube-system in prod-eks is classified danger by the guard rule prod-* / kube-system, istio-system.
+Type "kube-system" to continue: kube-system
+Running against prod-eks  DANGER, namespace kube-system  DANGER
+```
+
+Elsewhere the badge sits next to the namespace rather than the context, since that is what the rule classified:
+
+```console
+$ kctx ns kube-system
+! kube-system in prod-eks is classified danger by the guard rule prod-* / kube-system, istio-system.
+Type "kube-system" to continue: kube-system
+Namespace set to kube-system  DANGER in context prod-eks.  DANGER
+```
+
+`kctx exec` names the namespace on that announcement line **only when it is the guarded half** — an unremarkable namespace adds no noise. The namespace picker carries the badge too, with `current` moved into the detail column to make room, matching what the context picker already did.
+
+<br/>
+
 ### Managing rules from the command line
 
 `kctx guard` writes these rules for you, so the config file never has to be opened:
@@ -82,18 +142,26 @@ Guard added: cluster-7 → danger (confirm)
 $ kctx guard add --suffix -live --level danger
 Guard added: *-live → danger
 
+$ kctx guard add -n kube-system --confirm
+Guard added: any context / kube-system → danger (confirm)
+
+$ kctx guard add --prefix prod- -n kube-system -n istio-system --confirm
+Guard added: prod-* / kube-system, istio-system → danger (confirm)
+
 $ kctx guard list
 #  MATCH                                      LEVEL   CONFIRM
-1  *-live                                     danger  no
-2  cluster-7                                  danger  yes
-3  (^|[-_.])(prod|prd|production)([-_.]|$)    danger  no
-4  (^|[-_.])(stg|stage|staging|uat)([-_.]|$)  warn    no
+1  prod-* / kube-system, istio-system         danger  yes
+2  any context / kube-system                  danger  yes
+3  *-live                                     danger  no
+4  cluster-7                                  danger  yes
+5  (^|[-_.])(prod|prd|production)([-_.]|$)    danger  no
+6  (^|[-_.])(stg|stage|staging|uat)([-_.]|$)  warn    no
 
-$ kctx guard remove 1
+$ kctx guard remove 3
 Removed guard *-live.
 ```
 
-A new rule is **prepended**, so it wins over the built-in patterns. The first `add` also materializes the defaults into the file, which is where the `confirm: false` lines you can flip come from. An exact context name that matches nothing in the kubeconfig is rejected — a guard rule that silently covers nothing is worse than no rule at all.
+A new rule is **prepended**, so it wins over the built-in patterns. The first `add` also materializes the defaults into the file, which is where the `confirm: false` lines you can flip come from. An exact context name that matches nothing in the kubeconfig is rejected — a guard rule that silently covers nothing is worse than no rule at all. `--namespace`/`-n` is repeatable and also takes a comma-separated list; the `MATCH` column shows a namespace rule as both halves, because told only `kube-system` you cannot see whether the rule reaches the cluster in front of you.
 
 <br/>
 

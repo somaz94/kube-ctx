@@ -577,6 +577,74 @@ check_guard() {
   capture kctx ctx "$LIVE"
   assert_status 0 "with the rule gone the switch is not gated"
   assert_eq "$LIVE" "$(current_context)" "... and lands without a prompt"
+
+  check_namespace_guard
+}
+
+# The second guard axis. Worth a real cluster rather than a unit test: the
+# namespaces here are the ones a live API server actually reports, and the
+# assertion that matters most is a negative one — that a rule about kube-system
+# leaves the switch into the cluster alone.
+check_namespace_guard() {
+  section "Namespace guards, on every route to a namespace"
+
+  capture kctx guard add "$PROD" -n kube-system --confirm
+  assert_status 0 "guard add records a namespace rule"
+  assert_contains "$PROD / kube-system" "... describing both halves"
+
+  # $PROD sits in "default" here, so the rule about kube-system has nothing to
+  # say and the switch is not gated. The gated case is asserted further down,
+  # once the namespace has actually moved.
+  capture kctx ctx "$PROD" <"$WORK/no-answer"
+  assert_status 0 "a rule about another namespace does not gate the switch"
+  assert_eq "$PROD" "$(current_context)" "... which lands unprompted"
+
+  capture kctx ns kube-system <"$WORK/no-answer"
+  assert_status 130 "declining the namespace guard exits 130"
+  assert_eq "default" "$(context_namespace "$PROD")" "... without switching namespace"
+
+  # The same reasoning that put the context guard on every route: gating only
+  # "ns" would leave "exec -n kube-system -- kubectl delete ..." wide open.
+  capture kctx exec "$PROD" -n kube-system -- true <"$WORK/no-answer"
+  assert_status 130 "the namespace guard also gates exec -n"
+
+  capture kctx shell "$PROD" -n kube-system <"$WORK/no-answer"
+  assert_status 130 "the namespace guard also gates shell -n"
+
+  capture kctx ns default
+  assert_status 0 "an unguarded namespace is not gated"
+
+  printf '%s\n' "kube-system" >"$WORK/answer"
+  capture kctx ns kube-system <"$WORK/answer"
+  assert_status 0 "retyping the namespace passes the guard"
+  assert_eq "kube-system" "$(context_namespace "$PROD")" "... and the switch lands"
+
+  # A context whose own namespace is already the guarded one must not be a way
+  # round the gate, so these run with no -n at all.
+  capture kctx exec "$PROD" -- true <"$WORK/no-answer"
+  assert_status 130 "the effective namespace is guarded, not just the -n flag"
+
+  # Switching runs nothing, but every bare kubectl afterwards runs in whatever
+  # it left you standing in — the most travelled route of the four.
+  capture kctx ctx "$LIVE"
+  assert_status 0 "step out of the context first"
+  capture kctx ctx "$PROD" <"$WORK/no-answer"
+  assert_status 130 "the switch into a guarded namespace is gated too"
+  assert_eq "$LIVE" "$(current_context)" "... without switching"
+
+  printf '%s\n' "kube-system" >"$WORK/answer"
+  capture kctx ctx "$PROD" <"$WORK/answer"
+  assert_status 0 "retyping the namespace passes the switch guard"
+  assert_eq "$PROD" "$(current_context)" "... and the switch lands"
+
+  capture kctx guard remove 1
+  assert_status 0 "guard remove drops the namespace rule"
+
+  capture kctx ns default
+  assert_status 0 "back to the default namespace"
+
+  capture kctx ctx "$LIVE"
+  assert_status 0 "back to the live context"
 }
 
 check_alias() {

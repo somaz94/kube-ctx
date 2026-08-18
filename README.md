@@ -61,6 +61,8 @@ Without the hook, `kctx` edits the global kubeconfig exactly the way `kubectx` d
 
 ## Quick Start
 
+<br/>
+
 ### Install
 
 ```bash
@@ -132,7 +134,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx export [name]... [-f file]` | Write contexts out as a standalone kubeconfig |
 | `kctx alias <name> <context>` | Short names usable anywhere a context is |
 | `kctx bind [context]` | Bind a directory to a context; `cd` there switches |
-| `kctx guard add\|list\|remove` | Classify a context as production without writing a regex |
+| `kctx guard add\|list\|remove` | Classify a context — or a namespace inside it — as production, without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
 | `kctx shell [context]` | Subshell pinned to a context |
 | `kctx sessions [--clean]` | List the per-terminal kubeconfig copies, and tidy them |
@@ -175,6 +177,12 @@ Names lie, though — the cluster that would hurt most to break is often the one
 kctx guard add cluster-7 --confirm --label PROD
 kctx guard add --suffix -live --level danger
 kctx guard list
+```
+
+A rule can also list `namespaces:`, which moves it onto the other axis: it then guards those namespaces *inside* the contexts it matches, rather than the contexts themselves. That is the guard for someone who lives in a production cluster all day, where the risk is not arriving but what gets deleted in `kube-system` — and it covers `kctx ctx`, `kctx ns`, `kctx exec -n` and `kctx shell -n` alike:
+
+```bash
+kctx guard add --prefix prod- -n kube-system --confirm
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for every field.

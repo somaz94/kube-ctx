@@ -98,6 +98,37 @@ Scripts opt out with `-y`.
 
 <br/>
 
+## Gate the namespace, not the cluster
+
+When production is where you work all day, a guard on the context fires once and then gets typed past. Put it on the namespace instead:
+
+```yaml
+guards:
+  - prefix: prod-
+    namespaces: [kube-system, istio-system]
+    level: danger
+    confirm: true
+```
+
+```bash
+$ kctx ctx prod-eks
+Switched to context prod-eks (namespace default).
+
+$ kctx ns kube-system
+! kube-system in prod-eks is classified danger by the guard rule prod-* / kube-system, istio-system.
+Type "kube-system" to continue: kube-system
+Namespace set to kube-system  DANGER in context prod-eks.
+
+$ kctx exec prod-eks -n kube-system -- kubectl delete deploy/coredns
+! kube-system in prod-eks is classified danger by the guard rule prod-* / kube-system, istio-system.
+Type "kube-system" to continue: kube-sys
+Aborted.
+```
+
+Arriving in the cluster is unremarkable, so nothing is said about it; the namespace inside it is the gate, on every route to it — including `kctx ctx`, when the context you switch to already sits in a guarded namespace. Badge production as well and that is a second rule — one rule carries one `level`.
+
+<br/>
+
 ## Ask every cluster the same question
 
 ```bash

@@ -45,6 +45,12 @@ const header = `# kube-ctx configuration.
 # A rule carries exactly one matcher: match (regex), contexts (exact names),
 # prefix, or suffix. Manage them with kctx guard.
 #
+# A rule that also lists namespaces classifies those namespaces inside the
+# contexts it matches, instead of the contexts themselves — so kube-system in
+# production can require confirming while switching to production does not.
+# The context matcher may then be left out, meaning every context. Namespace
+# rules gate kctx ns, kctx exec -n and kctx shell -n alike.
+#
 # aliases are accepted anywhere a context name is; manage them with kctx alias.
 #
 # bindings map a directory to the context to work in there. With the shell hook
@@ -84,6 +90,21 @@ type Guard struct {
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
 	// Suffix matches context names that end with it.
 	Suffix string `yaml:"suffix,omitempty" json:"suffix,omitempty"`
+	// Namespaces narrows the rule to these exact namespaces inside a matching
+	// context, turning it from a rule about a cluster into a rule about a
+	// place within one.
+	//
+	// Setting it moves the whole rule onto the namespace axis: it stops
+	// classifying the context itself. Switching to a cluster and moving around
+	// inside it are different acts and want different verdicts — a context
+	// worth badging is rarely one worth prompting for, while kube-system is
+	// the reverse — and one rule cannot carry both, since Level, Confirm and
+	// Label would have to mean two things at once. Guard both by writing two
+	// rules.
+	//
+	// Exact names, not a pattern: unlike context names, the namespaces worth
+	// guarding are the standard ones every cluster spells identically.
+	Namespaces []string `yaml:"namespaces,omitempty" json:"namespaces,omitempty"`
 	// Level is safe, warn, or danger.
 	Level Level `yaml:"level" json:"level"`
 	// Confirm requires the user to retype the context name before switching.
@@ -114,8 +135,32 @@ func (g Guard) Matchers() []string {
 	return set
 }
 
+// ScopesNamespaces reports whether this rule classifies namespaces inside the
+// contexts it matches, rather than the contexts themselves.
+func (g Guard) ScopesNamespaces() bool { return len(g.Namespaces) > 0 }
+
 // Describe renders the rule's matcher for display.
+//
+// A namespace rule is rendered as both halves, "prod-* / kube-system", because
+// the two axes share one list: told only "kube-system", the reader cannot see
+// whether the rule reaches the cluster in front of them.
 func (g Guard) Describe() string {
+	if !g.ScopesNamespaces() {
+		return g.describeContexts()
+	}
+	where := g.describeContexts()
+	if where == "" {
+		// No context matcher is legal here and means every context, which has
+		// to be said out loud: an unqualified "kube-system" reads as a rule
+		// somebody forgot to finish.
+		where = "any context"
+	}
+	return where + " / " + strings.Join(g.Namespaces, ", ")
+}
+
+// describeContexts renders the context half of the matcher, empty when the
+// rule sets none.
+func (g Guard) describeContexts() string {
 	switch {
 	case len(g.Contexts) > 0:
 		return strings.Join(g.Contexts, ", ")

@@ -39,8 +39,20 @@ func runFanout(a *app, base *clientcmdapi.Config, targets []string, argv []strin
 	// Every guard is answered before anything runs. Asking once the command has
 	// already reached half the clusters is not a guard, and the prompt goes to
 	// stderr because the collected output is what stdout carries.
-	for _, target := range targets {
-		if err := requireGuardConfirmation(promptingOnStderr(a), target); err != nil {
+	prompt := promptingOnStderr(a)
+	// Kept per target rather than recomputed for the report: without -n each
+	// context brings its own, and the header has to badge the namespace the
+	// command actually ran in.
+	namespaces := make([]string, len(targets))
+	for i, target := range targets {
+		if err := requireGuardConfirmation(prompt, target); err != nil {
+			return err
+		}
+		namespaces[i] = opts.namespace
+		if namespaces[i] == "" {
+			namespaces[i] = namespaceOf(base, target)
+		}
+		if err := requireNamespaceGuardConfirmation(prompt, target, namespaces[i]); err != nil {
 			return err
 		}
 	}
@@ -71,7 +83,7 @@ func runFanout(a *app, base *clientcmdapi.Config, targets []string, argv []strin
 	}
 	wg.Wait()
 
-	return reportFanout(a, results)
+	return reportFanout(a, results, namespaces)
 }
 
 // execOne runs argv against one context in a throwaway session.
@@ -122,7 +134,7 @@ func execOne(base *clientcmdapi.Config, target string, argv []string, namespace 
 }
 
 // reportFanout prints every context's output and returns the process status.
-func reportFanout(a *app, results []fanoutResult) error {
+func reportFanout(a *app, results []fanoutResult, namespaces []string) error {
 	if a.jsonOutput() {
 		if err := writeJSON(a, results); err != nil {
 			return err
@@ -131,8 +143,13 @@ func reportFanout(a *app, results []fanoutResult) error {
 	}
 
 	pal := a.palette()
-	for _, r := range results {
+	for i, r := range results {
 		header := "== " + pal.Bold(r.Context) + guardSuffix(a, r.Context)
+		// The fan-out has the widest blast radius of the three, so a guarded
+		// namespace must not be the one thing it runs against in silence.
+		if badge := namespaceGuardSuffix(a, r.Context, namespaces[i]); badge != "" {
+			header += ", namespace " + pal.Bold(namespaces[i]) + badge
+		}
 		if r.ExitCode != 0 {
 			header += "  " + pal.Red(fmt.Sprintf("exit %d", r.ExitCode))
 		}

@@ -73,6 +73,9 @@ func runNs(a *app, args []string, back int, refresh bool, timeout time.Duration)
 			return nil // already listed, because there was no terminal
 		}
 	}
+	if err := requireNamespaceGuardConfirmation(a, cfg.CurrentContext, target); err != nil {
+		return err
+	}
 	return switchNamespace(a, cfg, target)
 }
 
@@ -90,7 +93,7 @@ func chooseNamespace(a *app, cfg *clientcmdapi.Config, refresh bool, timeout tim
 		return "", err
 	}
 
-	target, err := pickNamespace(a, current, result.Namespaces)
+	target, err := pickNamespace(a, cfg.CurrentContext, current, result.Namespaces)
 	if errors.Is(err, errPickerUnavailable) {
 		return "", printNamespaces(a, result.Namespaces, current)
 	}
@@ -140,8 +143,9 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 	// is still moving around inside production, and this line already names the
 	// context it is happening in.
 	pal := a.palette()
-	_, err = fmt.Fprintf(a.out, "Namespace set to %s in context %s.%s\n",
-		pal.Cyan(target), pal.Bold(cfg.CurrentContext), guardSuffix(a, cfg.CurrentContext))
+	_, err = fmt.Fprintf(a.out, "Namespace set to %s%s in context %s.%s\n",
+		pal.Cyan(target), namespaceGuardSuffix(a, cfg.CurrentContext, target),
+		pal.Bold(cfg.CurrentContext), guardSuffix(a, cfg.CurrentContext))
 	return err
 }
 

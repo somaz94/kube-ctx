@@ -20,6 +20,14 @@ Situations kube-ctx was built for, and what it does about them.
 
 <br/>
 
+## The cluster you never leave
+
+**The problem.** Some people spend the whole day in the production cluster; that is the job. A guard on *arriving* there fires once in the morning and then trains you to type past it. The command that actually hurts comes three hours later — a `kubectl delete` that lands in `kube-system` rather than the application namespace, sometimes without anyone typing `-n` at all, because the context's default namespace was already `kube-system`.
+
+**What kube-ctx does.** A guard rule can name `namespaces:` instead of guarding the context, which moves the speed bump to where the risk is: production stays a badge you walk past, and `kube-system` inside it demands that you retype the namespace. The gate covers `kctx ctx`, `kctx ns`, `kctx exec -n` and `kctx shell -n` alike, and what it checks is the namespace you will actually be in — so switching to the context whose own default is `kube-system` prompts too, even though the switch itself runs nothing. Guarding the cluster as well takes a second rule, since one rule carries one verdict.
+
+<br/>
+
 ## The kubeconfig that grew for a year
 
 **The problem.** Forty contexts. Some clusters were torn down months ago, several client certificates expired, two contexts reference a `cluster:` block someone deleted. You find out which when a command hangs.

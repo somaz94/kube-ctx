@@ -228,3 +228,127 @@ func TestValidateHasNoPositionalPrefix(t *testing.T) {
 		t.Errorf("Validate should not number the rule: %v", err)
 	}
 }
+
+func TestNamespaceRuleClassifiesTheNamespaceNotTheContext(t *testing.T) {
+	c, err := New([]config.Guard{
+		{Prefix: "prod-", Namespaces: []string{"kube-system"}, Level: config.LevelDanger, Confirm: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// The rule matches prod-* but says nothing about the context itself:
+	// switching to the cluster is not what it guards.
+	if v := c.Classify("prod-eks"); v.Level != config.LevelSafe || v.Confirm {
+		t.Errorf("Classify(prod-eks) = %+v, want a safe verdict with no confirm", v)
+	}
+
+	tests := []struct {
+		ctx, ns string
+		want    config.Level
+		confirm bool
+	}{
+		{"prod-eks", "kube-system", config.LevelDanger, true},
+		{"prod-eks", "default", config.LevelSafe, false},
+		// Both halves have to match: kube-system in a kind cluster is not the
+		// kube-system the rule means.
+		{"kind-local", "kube-system", config.LevelSafe, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ctx+"/"+tt.ns, func(t *testing.T) {
+			v := c.ClassifyNamespace(tt.ctx, tt.ns)
+			if v.Level != tt.want || v.Confirm != tt.confirm {
+				t.Errorf("ClassifyNamespace(%q, %q) = %+v, want level %v confirm %v",
+					tt.ctx, tt.ns, v, tt.want, tt.confirm)
+			}
+		})
+	}
+}
+
+func TestNamespaceRuleWithoutAContextMatcherCoversEveryContext(t *testing.T) {
+	c, err := New([]config.Guard{
+		{Namespaces: []string{"kube-system"}, Level: config.LevelDanger, Confirm: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, ctxName := range []string{"prod-eks", "kind-local", "anything"} {
+		if v := c.ClassifyNamespace(ctxName, "kube-system"); !v.Confirm {
+			t.Errorf("ClassifyNamespace(%q, kube-system) = %+v, want confirm", ctxName, v)
+		}
+	}
+	if v := c.ClassifyNamespace("prod-eks", "default"); v.Level != config.LevelSafe {
+		t.Errorf("ClassifyNamespace(prod-eks, default) = %+v, want safe", v)
+	}
+}
+
+func TestContextRuleNeverClassifiesANamespace(t *testing.T) {
+	c, err := New(config.DefaultGuards())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// "prod" as a namespace name must not inherit the context rule that
+	// happens to match the same word.
+	if v := c.ClassifyNamespace("dev", "prod"); v.Level != config.LevelSafe {
+		t.Errorf("ClassifyNamespace(dev, prod) = %+v, want safe", v)
+	}
+}
+
+func TestTheTwoAxesKeepSeparateFirstMatchOrder(t *testing.T) {
+	// A namespace rule sitting above a context rule must not shadow it: the
+	// context rule is still the first one on its own axis.
+	c, err := New([]config.Guard{
+		{Namespaces: []string{"kube-system"}, Level: config.LevelWarn},
+		{Prefix: "prod-", Level: config.LevelDanger, Confirm: true},
+		{Prefix: "prod-", Namespaces: []string{"kube-system"}, Level: config.LevelDanger},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if v := c.Classify("prod-eks"); v.Level != config.LevelDanger || !v.Confirm {
+		t.Errorf("Classify(prod-eks) = %+v, want danger with confirm", v)
+	}
+	// Among namespace rules the first still wins, so the warn rule answers.
+	if v := c.ClassifyNamespace("prod-eks", "kube-system"); v.Level != config.LevelWarn {
+		t.Errorf("ClassifyNamespace(prod-eks, kube-system) = %+v, want warn", v)
+	}
+}
+
+func TestNamespaceRuleRejectsAnEmptyNamespace(t *testing.T) {
+	err := Validate(config.Guard{Namespaces: []string{""}, Level: config.LevelDanger})
+	if err == nil || !strings.Contains(err.Error(), "empty namespace") {
+		t.Fatalf("Validate = %v, want an empty-namespace error", err)
+	}
+}
+
+func TestNamespaceRuleStillRejectsTwoContextMatchers(t *testing.T) {
+	err := Validate(config.Guard{
+		Prefix: "prod-", Suffix: "-live",
+		Namespaces: []string{"kube-system"}, Level: config.LevelDanger,
+	})
+	if err == nil || !strings.Contains(err.Error(), "more than one matcher") {
+		t.Fatalf("Validate = %v, want a two-matcher error", err)
+	}
+}
+
+// A hand-edited config can carry the same stray space the CLI does.
+func TestNamespaceRuleTrimsConfiguredNames(t *testing.T) {
+	c, err := New([]config.Guard{
+		{Namespaces: []string{" kube-system "}, Level: config.LevelDanger, Confirm: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if v := c.ClassifyNamespace("prod-eks", "kube-system"); !v.Confirm {
+		t.Errorf("ClassifyNamespace = %+v, want confirm; the name was not trimmed", v)
+	}
+}
+
+func TestNamespaceRuleRejectsAWhitespaceOnlyNamespace(t *testing.T) {
+	err := Validate(config.Guard{Namespaces: []string{"  "}, Level: config.LevelDanger})
+	if err == nil || !strings.Contains(err.Error(), "empty namespace") {
+		t.Fatalf("Validate = %v, want an empty-namespace error", err)
+	}
+}

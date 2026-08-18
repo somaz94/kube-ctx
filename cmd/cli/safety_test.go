@@ -7,6 +7,7 @@ import (
 
 	"github.com/somaz94/kube-ctx/internal/testutil"
 	"github.com/somaz94/kube-ctx/pkg/config"
+	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
 // guardConfirmConfig makes "prod" a danger context that demands retyping.
@@ -432,5 +433,292 @@ func TestShellHintDoesNotRepeatWhenNesting(t *testing.T) {
 	}
 	if strings.Contains(h.stderr(), "PS1") {
 		t.Errorf("stderr = %q, want no repeated hint", h.stderr())
+	}
+}
+
+// nsGuardConfirmConfig makes kube-ctx demand retyping before kube-system in a
+// prod-* context, while leaving the context itself unguarded — the whole point
+// of the second axis.
+const nsGuardConfirmConfig = "guards:\n  - prefix: prod\n    namespaces: [kube-system]\n" +
+	"    level: danger\n    confirm: true\n"
+
+// The same reasoning that put the context guard on every route applies here:
+// a namespace guard that only covered "kctx ns" would be bypassed by
+// "kctx exec prod -n kube-system -- kubectl delete ...".
+func TestNamespaceGuardCoversEveryRouteToANamespace(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"ns", []string{"ns", "kube-system"}},
+		{"shell", []string{"shell", "prod", "-n", "kube-system"}},
+		{"exec", []string{"exec", "prod", "-n", "kube-system", "--", "true"}},
+		{"exec --all", []string{"exec", "-c", "prod", "-n", "kube-system", "--", "true"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			writeUserConfig(t, nsGuardConfirmConfig)
+			captureRunNoop(t)
+			// "kctx ns" acts on the current context, so start in prod.
+			if err := h.run("ctx", "prod"); err != nil {
+				t.Fatalf("ctx prod: %v", err)
+			}
+			h.stdin("no\n")
+
+			err := h.run(tt.args...)
+			if code := ExitCode(err); code != ExitAborted {
+				t.Errorf("ExitCode = %d, want %d (out %q, err %q)",
+					code, ExitAborted, h.stdout(), h.stderr())
+			}
+			if got := h.config().Contexts["prod"].Namespace; got != "monitoring" {
+				t.Errorf("namespace = %q; a declined guard must change nothing", got)
+			}
+		})
+	}
+}
+
+// Retyping the namespace lets the command through.
+func TestNamespaceGuardConfirmedSwitchApplies(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardConfirmConfig)
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	h.stdin("kube-system\n")
+
+	if err := h.run("ns", "kube-system"); err != nil {
+		t.Fatalf("ns kube-system: %v", err)
+	}
+	if got := h.config().Contexts["prod"].Namespace; got != "kube-system" {
+		t.Errorf("namespace = %q, want kube-system", got)
+	}
+}
+
+// The prompt names the namespace, not the context: the namespace is what the
+// rule is about and what has to be retyped.
+func TestNamespaceGuardPromptAsksForTheNamespace(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardConfirmConfig)
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	h.stdin("no\n")
+	_ = h.run("ns", "kube-system")
+
+	out := h.stdout()
+	if !strings.Contains(out, `Type "kube-system" to continue`) {
+		t.Errorf("prompt asked for the wrong phrase: %q", out)
+	}
+	if !strings.Contains(out, "kube-system in prod is classified danger") {
+		t.Errorf("prompt did not name both halves: %q", out)
+	}
+}
+
+// A namespace rule reaches a context switch only through the namespace it
+// lands in. Here prod sits in "monitoring", so the rule about kube-system has
+// nothing to say and the switch must not prompt — otherwise the second axis
+// has quietly become the first.
+func TestNamespaceGuardDoesNotBlockAnUnrelatedContextSwitch(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardConfirmConfig)
+	h.stdin("no\n")
+
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "prod" {
+		t.Errorf("current = %q, want prod", got)
+	}
+	if strings.Contains(h.stdout(), "to continue") {
+		t.Errorf("a namespace rule prompted on a context switch: %q", h.stdout())
+	}
+}
+
+// Guarding only the -n flag would let a context whose own default is already
+// the guarded namespace walk in unchecked.
+func TestNamespaceGuardCoversTheContextsOwnNamespace(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod", Namespace: "kube-system"}},
+	})
+	writeUserConfig(t, nsGuardConfirmConfig)
+	captureRunNoop(t)
+	h.stdin("no\n")
+
+	err := h.run("exec", "prod", "--", "true")
+	if code := ExitCode(err); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d; -n was never given, but the context "+
+			"already pointed at the guarded namespace", code, ExitAborted)
+	}
+}
+
+// A namespace nobody guarded still goes through without a word.
+func TestUnguardedNamespaceIsUntouched(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardConfirmConfig)
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+
+	if err := h.run("ns", "payments"); err != nil {
+		t.Fatalf("ns payments: %v", err)
+	}
+	if got := h.config().Contexts["prod"].Namespace; got != "payments" {
+		t.Errorf("namespace = %q, want payments", got)
+	}
+	if strings.Contains(h.stdout(), "to continue") {
+		t.Errorf("an unguarded namespace prompted: %q", h.stdout())
+	}
+}
+
+// nsGuardBadgeConfig labels without blocking, the way the built-in context
+// rules do.
+const nsGuardBadgeConfig = "guards:\n  - namespaces: [kube-system]\n    level: danger\n"
+
+func TestNamespaceBadgeOnSwitch(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardBadgeConfig)
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+
+	if err := h.run("ns", "kube-system"); err != nil {
+		t.Fatalf("ns kube-system: %v", err)
+	}
+	// The badge sits next to the namespace it describes, not at the end of the
+	// line where the context's own badge goes.
+	if !strings.Contains(h.stdout(), "Namespace set to kube-system  DANGER in context prod") {
+		t.Errorf("stdout = %q", h.stdout())
+	}
+}
+
+// A guarded namespace under an unguarded context still has to announce itself,
+// or exec would run there in silence.
+func TestExecAnnouncesAGuardedNamespace(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardBadgeConfig)
+	allowRun(t)
+
+	if err := h.run("exec", "dev", "-n", "kube-system", "--", "true"); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if !strings.Contains(h.stderr(), "Running against dev, namespace kube-system  DANGER") {
+		t.Errorf("stderr = %q", h.stderr())
+	}
+}
+
+// An unremarkable namespace adds no noise to the line.
+func TestExecDoesNotNameAnUnguardedNamespace(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardConfirmConfig)
+	allowRun(t)
+	h.stdin("prod\n")
+
+	if err := h.run("exec", "prod", "--", "true"); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if strings.Contains(h.stderr(), "namespace") {
+		t.Errorf("stderr named an unguarded namespace: %q", h.stderr())
+	}
+}
+
+// The picker is where a namespace is most easily mis-selected, so the badge
+// has to reach the list — and the guard still runs on what comes back out.
+func TestNamespacePickerShowsTheBadgeAndStillGuards(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, nsGuardConfirmConfig)
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	seedNamespaceCache(t, "prod", "monitoring", "kube-system")
+	frames := scriptPicker(t, "kube\r")
+	h.stdin("no\n")
+
+	err := h.run("ns")
+	if code := ExitCode(err); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d; the picker must not be a way past the guard",
+			code, ExitAborted)
+	}
+	if !strings.Contains(frames.String(), "DANGER") {
+		t.Errorf("the picker did not badge the guarded namespace: %q", frames.String())
+	}
+	if !strings.Contains(frames.String(), "current") {
+		t.Errorf("the picker lost the current-namespace marker: %q", frames.String())
+	}
+}
+
+// bind --apply refuses a confirm-guarded context so that a cd is never a
+// prompt. The namespace axis has to be refused for the same reason, or the
+// binding walks the shell into kube-system without asking.
+func TestBindApplyRefusesANamespaceGuardedContext(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod", Namespace: "kube-system"}},
+	})
+	writeUserConfig(t, nsGuardConfirmConfig)
+
+	dir := t.TempDir()
+	if err := h.run("bind", "prod", "--path", dir); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	t.Setenv(shellenv.EnvBound, "")
+	if err := h.run("bind", "--apply", "--path", dir); err != nil {
+		t.Fatalf("bind --apply: %v", err)
+	}
+
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q; a cd must not enter a namespace-guarded context", got)
+	}
+	if !strings.Contains(h.stderr(), "is guarded") {
+		t.Errorf("stderr = %q, want it to say why the binding was not followed", h.stderr())
+	}
+}
+
+// Switching runs nothing, but everything typed afterwards runs in whatever the
+// switch left you standing in — so it is a route to the namespace like any
+// other, and the most travelled one.
+func TestNamespaceGuardCoversTheContextSwitch(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod", Namespace: "kube-system"}},
+	})
+	writeUserConfig(t, nsGuardConfirmConfig)
+	h.stdin("no\n")
+
+	err := h.run("ctx", "prod")
+	if code := ExitCode(err); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
+	}
+	if got := h.config().CurrentContext; got != "dev" {
+		t.Errorf("current = %q; a declined guard must change nothing", got)
+	}
+}
+
+// With both axes guarded the two prompts are asked in turn, and each wants its
+// own name back.
+func TestBothGuardsPromptSeparatelyOnASwitch(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "dev",
+		Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod", Namespace: "kube-system"}},
+	})
+	writeUserConfig(t, guardConfirmConfig+"  - namespaces: [kube-system]\n"+
+		"    level: danger\n    confirm: true\n")
+
+	// One answer per prompt, context first.
+	h.stdin("prod\nkube-system\n")
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "prod" {
+		t.Errorf("current = %q, want prod", got)
+	}
+
+	out := h.stdout()
+	if !strings.Contains(out, `Type "prod" to continue`) {
+		t.Errorf("the context prompt did not run: %q", out)
+	}
+	if !strings.Contains(out, `Type "kube-system" to continue`) {
+		t.Errorf("the namespace prompt did not run: %q", out)
 	}
 }

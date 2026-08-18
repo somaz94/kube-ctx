@@ -324,6 +324,11 @@ func TestGuardDescribe(t *testing.T) {
 		{Guard{Prefix: "acme-"}, "acme-*"},
 		{Guard{Suffix: "-live"}, "*-live"},
 		{Guard{Match: "^x$"}, "^x$"},
+		// A namespace rule shows both halves; told only "kube-system", the
+		// reader cannot see whether it reaches the cluster in front of them.
+		{Guard{Prefix: "prod-", Namespaces: []string{"kube-system", "istio-system"}},
+			"prod-* / kube-system, istio-system"},
+		{Guard{Namespaces: []string{"kube-system"}}, "any context / kube-system"},
 	}
 	for _, tt := range tests {
 		if got := tt.guard.Describe(); got != tt.want {
@@ -434,5 +439,45 @@ func TestBindingsResolveSymlinks(t *testing.T) {
 		if target, _, ok := cfg.ResolveBinding(dir); !ok || target != "prod" {
 			t.Errorf("ResolveBinding(%s) = %q (ok=%v), want prod", dir, target, ok)
 		}
+	}
+}
+
+func TestGuardScopesNamespaces(t *testing.T) {
+	if (Guard{Prefix: "prod-"}).ScopesNamespaces() {
+		t.Error("a rule with no namespaces scopes namespaces")
+	}
+	if !(Guard{Namespaces: []string{"kube-system"}}).ScopesNamespaces() {
+		t.Error("a rule listing namespaces does not scope namespaces")
+	}
+}
+
+func TestNamespaceGuardRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, FileName)
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	cfg.AddGuard(Guard{
+		Prefix:     "prod-",
+		Namespaces: []string{"kube-system"},
+		Level:      LevelDanger,
+		Confirm:    true,
+	})
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	reloaded, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	got := reloaded.Guards[0]
+	if len(got.Namespaces) != 1 || got.Namespaces[0] != "kube-system" {
+		t.Fatalf("namespaces = %v, want [kube-system]", got.Namespaces)
+	}
+	if got.Prefix != "prod-" || !got.Confirm {
+		t.Fatalf("rule did not round-trip: %+v", got)
 	}
 }

@@ -68,16 +68,30 @@ func pickContext(a *app, cfg *clientcmdapi.Config) (string, error) {
 }
 
 // pickNamespace lets the user choose a namespace interactively.
-func pickNamespace(a *app, current string, names []string) (string, error) {
+//
+// "current" moves to the detail column so the badge can carry the guard
+// verdict, as it does for contexts. The picker is where a namespace is most
+// easily mis-selected, and a list that shows kube-system indistinguishable
+// from the rest is the one place the rule most needs to be visible.
+func pickNamespace(a *app, ctxName, current string, names []string) (string, error) {
 	if len(names) == 0 {
 		return "", errPickerUnavailable
+	}
+
+	classifier, err := a.classifier()
+	if err != nil {
+		return "", err
 	}
 
 	items := make([]picker.Item, 0, len(names))
 	for _, name := range names {
 		item := picker.Item{Label: name}
+		if verdict := classifier.ClassifyNamespace(ctxName, name); verdict.Label != "" {
+			item.Badge = verdict.Label
+			item.BadgeStyle = verdict.Style()
+		}
 		if name == current {
-			item.Badge = "current"
+			item.Detail = "current"
 		}
 		items = append(items, item)
 	}

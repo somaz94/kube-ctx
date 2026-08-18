@@ -8,6 +8,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/somaz94/kube-ctx/pkg/contexts"
+	"github.com/somaz94/kube-ctx/pkg/guard"
 	"github.com/somaz94/kube-ctx/pkg/picker"
 )
 
@@ -92,6 +93,17 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
+	// The namespace the switch lands in counts as a route to it: nothing runs
+	// here, but everything the user types next runs in whatever this leaves
+	// them standing in. Skipping it left the most-travelled path — switch, then
+	// a bare kubectl — as the one way past a namespace guard.
+	namespace, err := contexts.Namespace(cfg, target)
+	if err != nil {
+		return err
+	}
+	if err := requireNamespaceGuardConfirmation(a, target, namespace); err != nil {
+		return err
+	}
 
 	previous, err := contexts.Switch(cfg, target)
 	if err != nil {
@@ -112,12 +124,9 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	}
 
 	pal := a.palette()
-	namespace, err := contexts.Namespace(cfg, target)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(a.out, "Switched to context %s (namespace %s).%s\n",
-		pal.Bold(target), pal.Cyan(namespace), guardSuffix(a, target))
+	_, err = fmt.Fprintf(a.out, "Switched to context %s (namespace %s%s).%s\n",
+		pal.Bold(target), pal.Cyan(namespace),
+		namespaceGuardSuffix(a, target, namespace), guardSuffix(a, target))
 	return err
 }
 
@@ -145,6 +154,23 @@ func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
 // dangerous of the two.
 func requireGuardConfirmation(a *app, target string) error {
 	ok, err := confirmGuard(a, target)
+	return enforceGuard(a, ok, err)
+}
+
+// requireNamespaceGuardConfirmation runs the same prompt for a namespace rule,
+// before anything is allowed to reach the namespace through this context.
+//
+// It sits beside the context check rather than inside it because the two are
+// asked at different moments: the context is known as soon as a command names
+// one, while the namespace is only settled once the -n flag and the context's
+// own default have been reconciled.
+func requireNamespaceGuardConfirmation(a *app, target, namespace string) error {
+	ok, err := confirmNamespaceGuard(a, target, namespace)
+	return enforceGuard(a, ok, err)
+}
+
+// enforceGuard turns a confirmation answer into the command's outcome.
+func enforceGuard(a *app, ok bool, err error) error {
 	if err != nil {
 		return err
 	}
@@ -177,13 +203,50 @@ func confirmGuard(a *app, target string) (bool, error) {
 	return confirmPhrase(a, prompt, target)
 }
 
+// confirmNamespaceGuard asks for confirmation when a namespace rule demands it
+// before reaching a namespace through target.
+//
+// The phrase to retype is the namespace, not the context: the namespace is
+// what the rule is about, and it is the word the user is being asked to look
+// at twice.
+func confirmNamespaceGuard(a *app, target, namespace string) (bool, error) {
+	classifier, err := a.classifier()
+	if err != nil {
+		return false, err
+	}
+	verdict := classifier.ClassifyNamespace(target, namespace)
+	if !verdict.Confirm {
+		return true, nil
+	}
+
+	pal := a.palette()
+	prompt := fmt.Sprintf("%s %s in %s is classified %s by the guard rule %s.",
+		pal.Red("!"), pal.Bold(namespace), pal.Bold(target),
+		pal.Red(string(verdict.Level)), pal.Dim(verdict.Rule))
+	return confirmPhrase(a, prompt, namespace)
+}
+
 // guardSuffix renders the badge appended to the switch confirmation line.
 func guardSuffix(a *app, target string) string {
 	classifier, err := a.classifier()
 	if err != nil {
 		return ""
 	}
-	verdict := classifier.Classify(target)
+	return badgeFor(a, classifier.Classify(target))
+}
+
+// namespaceGuardSuffix renders the badge for a namespace as reached through one
+// context.
+func namespaceGuardSuffix(a *app, target, namespace string) string {
+	classifier, err := a.classifier()
+	if err != nil {
+		return ""
+	}
+	return badgeFor(a, classifier.ClassifyNamespace(target, namespace))
+}
+
+// badgeFor colorizes a verdict's label, or returns "" when it has none.
+func badgeFor(a *app, verdict guard.Verdict) string {
 	if verdict.Label == "" {
 		return ""
 	}

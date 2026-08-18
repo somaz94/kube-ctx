@@ -49,6 +49,8 @@ The namespace list comes from the API server and is cached for 10 minutes per co
 
 Namespace history is scoped per context: `kctx ns -` in the dev cluster never offers a namespace that only exists in prod.
 
+Namespaces can be guarded as well as contexts. Where a rule covers one, the badge is printed next to the namespace — `Namespace set to kube-system  DANGER in context prod-eks.` — and a rule with `confirm` asks you to retype the namespace first. See [Configuration](CONFIGURATION.md#namespace-rules).
+
 <br/>
 
 ## kctx list
@@ -220,12 +222,27 @@ kctx guard add cluster-7 --confirm --label PROD    # this exact context
 kctx guard add --suffix -live --level danger       # a local naming convention
 kctx guard add --prefix acme- --level warn
 kctx guard add --match '^eks-.*-main$' --confirm   # regex, for anything else
+kctx guard add -n kube-system --confirm            # a namespace, in every context
+kctx guard add --prefix prod- -n kube-system -n istio-system --confirm
 kctx guard remove 1                                # by its number in the list
 ```
 
 The built-in rules classify by name — `prod`, `prd`, `production` as **danger**, `stg`, `staging`, `uat` as **warn** — and only badge; nothing is blocked until a rule sets `confirm`. `--confirm` makes switching to a matching context demand that you retype its full name, the same shape of speed bump as `terraform destroy`. `-y` skips it, for scripts.
 
 The reason `add` takes a plain context name is that the clusters most worth guarding are the ones the built-in patterns miss. A rule may carry only one matcher — a context list, a prefix, a suffix, or a regex — and new rules are prepended, so they win over the defaults.
+
+`--namespace`/`-n` turns the rule around: it classifies those namespaces *inside* the contexts it matches, instead of the contexts themselves. It is repeatable and also accepts a comma-separated list, the names are exact rather than a pattern, and it is the one rule that may leave the context matcher out — which then means every context. `confirm` on a namespace rule gates `kctx ctx`, `kctx ns`, `kctx exec -n` and `kctx shell -n` alike, asks you to retype the namespace rather than the context, and applies to the namespace you will actually be in, not only one `-n` named. Guarding both a cluster and a namespace inside it takes two rules: one rule carries one `level`.
+
+```
+$ kctx guard add --prefix prod- -n kube-system -n istio-system --confirm
+Guard added: prod-* / kube-system, istio-system → danger (confirm)
+
+$ kctx guard list
+#  MATCH                               LEVEL   CONFIRM
+1  prod-* / kube-system, istio-system  danger  yes
+```
+
+`MATCH` shows both halves, because told only `kube-system` you cannot see whether the rule reaches the cluster in front of you. See [Configuration](CONFIGURATION.md#namespace-rules) for the rest.
 
 <br/>
 

@@ -53,6 +53,13 @@ func runShell(a *app, args []string, namespace string) error {
 	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
+	// The namespace the shell opens in, whether -n named it or the context
+	// already pointed there. Guarding only the flag would mean a context whose
+	// own default is kube-system walks in unguarded.
+	ns := namespaceOf(cfg, target)
+	if err := requireNamespaceGuardConfirmation(a, target, ns); err != nil {
+		return err
+	}
 
 	session, err := shellenv.New(cfg, target)
 	if err != nil {
@@ -70,8 +77,8 @@ func runShell(a *app, args []string, namespace string) error {
 	}
 
 	pal := a.palette()
-	fmt.Fprintf(a.out, "Entering a shell pinned to %s (namespace %s). Type exit to leave.%s\n",
-		pal.Bold(target), pal.Cyan(namespaceOf(cfg, target)), guardSuffix(a, target))
+	fmt.Fprintf(a.out, "Entering a shell pinned to %s (namespace %s%s). Type exit to leave.%s\n",
+		pal.Bold(target), pal.Cyan(ns), namespaceGuardSuffix(a, target, ns), guardSuffix(a, target))
 	hintPrompt(a, shellPath)
 
 	cmd := exec.Command(shellPath)
@@ -203,13 +210,20 @@ func fanoutTargets(a *app, cfg *clientcmdapi.Config, opts execOptions) ([]string
 }
 
 // runExec builds a throwaway session and runs argv inside it.
-func runExec(a *app, target string, argv []string, namespace string) error {
-	cfg, target, err := sessionConfig(a, []string{target}, namespace)
+func runExec(a *app, target string, argv []string, nsFlag string) error {
+	cfg, target, err := sessionConfig(a, []string{target}, nsFlag)
 	if err != nil {
 		return err
 	}
 
 	if err := requireGuardConfirmation(a, target); err != nil {
+		return err
+	}
+	// Where the command will actually run, whether -n named it or the context
+	// already pointed there: guarding only the flag would let a context whose
+	// own default is kube-system through unguarded.
+	ns := namespaceOf(cfg, target)
+	if err := requireNamespaceGuardConfirmation(a, target, ns); err != nil {
 		return err
 	}
 
@@ -221,9 +235,16 @@ func runExec(a *app, target string, argv []string, namespace string) error {
 
 	// The badge that "kctx ctx" prints on a switch has no equivalent here, and
 	// running a command against production with no indication of where it is
-	// going is the thing this tool exists to stop.
-	if badge := guardSuffix(a, target); badge != "" {
-		fmt.Fprintf(a.errOut, "Running against %s%s\n", a.palette().Bold(target), badge)
+	// going is the thing this tool exists to stop. The namespace is named only
+	// when it is the guarded half, so an unremarkable one adds no noise.
+	pal := a.palette()
+	ctxBadge, nsBadge := guardSuffix(a, target), namespaceGuardSuffix(a, target, ns)
+	if ctxBadge != "" || nsBadge != "" {
+		where := pal.Bold(target) + ctxBadge
+		if nsBadge != "" {
+			where += ", namespace " + pal.Bold(ns) + nsBadge
+		}
+		fmt.Fprintf(a.errOut, "Running against %s\n", where)
 	}
 
 	cmd := exec.Command(argv[0], argv[1:]...)

@@ -181,7 +181,12 @@ func runBindApply(a *app, opts bindOptions) error {
 	if err != nil {
 		return err
 	}
-	if classifier.Classify(target).Confirm {
+	// The namespace counts as well as the context: a directory bound to a
+	// context whose own default is kube-system would otherwise drop the shell
+	// into the guarded namespace on a cd, and walking into a directory is no
+	// more consent to that than it is to being in production.
+	if classifier.Classify(target).Confirm ||
+		classifier.ClassifyNamespace(target, namespaceOf(cfg, target)).Confirm {
 		return announceBound(a, target, fmt.Sprintf("%s is guarded; switch to it explicitly with \"kctx ctx %s\"",
 			a.palette().Bold(target), target))
 	}

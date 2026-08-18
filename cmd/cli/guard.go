@@ -14,14 +14,16 @@ import (
 func newGuardCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "guard",
-		Short: "Manage the rules that classify contexts",
-		Long: "Manage the rules that classify contexts.\n\n" +
+		Short: "Manage the rules that classify contexts and namespaces",
+		Long: "Manage the rules that classify contexts and namespaces.\n\n" +
 			"The built-in rules key off the name — prod, prd, production for danger,\n" +
 			"stg, staging, uat for warn — and they only badge; switching is never\n" +
 			"blocked until a rule sets confirm.\n\n" +
 			"Names lie, though. The cluster that would hurt most to break is often\n" +
 			"the one called cluster-7, and no pattern over \"prod\" will ever find it.\n" +
-			"These commands name it directly, without hand-writing a regex.",
+			"These commands name it directly, without hand-writing a regex.\n\n" +
+			"A rule listing namespaces guards those inside the contexts it matches,\n" +
+			"rather than the contexts — see \"kctx guard add --help\".",
 	}
 	cmd.AddCommand(newGuardListCmd(a), newGuardAddCmd(a), newGuardRemoveCmd(a))
 	return cmd
@@ -43,12 +45,13 @@ func newGuardListCmd(a *app) *cobra.Command {
 // newGuardAddCmd appends a rule.
 func newGuardAddCmd(a *app) *cobra.Command {
 	var (
-		level   string
-		confirm bool
-		label   string
-		prefix  string
-		suffix  string
-		match   string
+		level      string
+		confirm    bool
+		label      string
+		prefix     string
+		suffix     string
+		match      string
+		namespaces []string
 	)
 
 	cmd := &cobra.Command{
@@ -58,30 +61,41 @@ func newGuardAddCmd(a *app) *cobra.Command {
 			"Context names given as arguments are matched exactly. Use --prefix,\n" +
 			"--suffix or --match instead to cover a family of names. Exactly one of\n" +
 			"the four forms may be used.\n\n" +
+			"--namespace turns the rule around: it then classifies those namespaces\n" +
+			"inside the contexts it matches, instead of the contexts themselves, and\n" +
+			"gates kctx ns, kctx exec -n and kctx shell -n. Give no context matcher\n" +
+			"alongside it to mean every context. Guarding both a cluster and a\n" +
+			"namespace inside it takes two rules, since one rule has one level.\n\n" +
 			"A new rule is prepended, so it wins over the built-in name patterns.",
 		Example: "  kctx guard add cluster-7 --confirm\n" +
 			"  kctx guard add --suffix -live --label PROD\n" +
 			"  kctx guard add --prefix acme- --level warn\n" +
-			"  kctx guard add --match '^eks-.*-main$' --confirm",
+			"  kctx guard add --match '^eks-.*-main$' --confirm\n" +
+			"  kctx guard add -n kube-system --confirm\n" +
+			"  kctx guard add --prefix prod- -n kube-system -n istio-system --confirm",
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: completeContextList(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGuardAdd(a, args, guardSpec{
-				level:   level,
-				confirm: confirm,
-				label:   label,
-				prefix:  prefix,
-				suffix:  suffix,
-				match:   match,
+				level:      level,
+				confirm:    confirm,
+				label:      label,
+				prefix:     prefix,
+				suffix:     suffix,
+				match:      match,
+				namespaces: namespaces,
 			})
 		},
 	}
 	cmd.Flags().StringVar(&level, "level", "danger", "safe, warn, or danger")
-	cmd.Flags().BoolVar(&confirm, "confirm", false, "require retyping the context name before switching")
+	cmd.Flags().BoolVar(&confirm, "confirm", false, "require retyping the guarded name before going there")
 	cmd.Flags().StringVar(&label, "label", "", "badge text to show instead of the level name")
 	cmd.Flags().StringVar(&prefix, "prefix", "", "match context names starting with this")
 	cmd.Flags().StringVar(&suffix, "suffix", "", "match context names ending with this")
 	cmd.Flags().StringVar(&match, "match", "", "match context names against this regular expression")
+	cmd.Flags().StringSliceVarP(&namespaces, "namespace", "n", nil,
+		"guard these namespaces inside the matching contexts, instead of the contexts (repeatable)")
+	registerNamespaceFlagCompletion(a, cmd)
 	_ = cmd.RegisterFlagCompletionFunc("level", cobra.FixedCompletions(
 		[]string{string(config.LevelSafe), string(config.LevelWarn), string(config.LevelDanger)},
 		cobra.ShellCompDirectiveNoFileComp))
@@ -129,12 +143,13 @@ func completeGuardPositions(a *app) func(*cobra.Command, []string, string) ([]st
 
 // guardSpec is the rule described on the command line.
 type guardSpec struct {
-	level   string
-	confirm bool
-	label   string
-	prefix  string
-	suffix  string
-	match   string
+	level      string
+	confirm    bool
+	label      string
+	prefix     string
+	suffix     string
+	match      string
+	namespaces []string
 }
 
 // runGuardList prints every rule, in the order they are consulted.
@@ -178,18 +193,19 @@ func runGuardList(a *app) error {
 // runGuardAdd validates the requested rule and prepends it.
 func runGuardAdd(a *app, args []string, spec guardSpec) error {
 	rule := config.Guard{
-		Contexts: args,
-		Prefix:   spec.prefix,
-		Suffix:   spec.suffix,
-		Match:    spec.match,
-		Level:    config.Level(strings.ToLower(spec.level)),
-		Confirm:  spec.confirm,
-		Label:    spec.label,
+		Contexts:   args,
+		Prefix:     spec.prefix,
+		Suffix:     spec.suffix,
+		Match:      spec.match,
+		Namespaces: trimAll(spec.namespaces),
+		Level:      config.Level(strings.ToLower(spec.level)),
+		Confirm:    spec.confirm,
+		Label:      spec.label,
 	}
 
 	switch set := rule.Matchers(); {
-	case len(set) == 0:
-		return fmt.Errorf("give a context name, or one of --prefix, --suffix or --match")
+	case len(set) == 0 && !rule.ScopesNamespaces():
+		return fmt.Errorf("give a context name, or one of --prefix, --suffix, --match or --namespace")
 	case len(set) > 1:
 		return fmt.Errorf("use only one of %s", strings.Join(set, ", "))
 	}
@@ -253,6 +269,24 @@ func runGuardRemove(a *app, arg string) error {
 	}
 	_, err = fmt.Fprintf(a.out, "Removed guard %s.\n", a.palette().Bold(removed.Describe()))
 	return err
+}
+
+// trimAll strips the surrounding space from every entry.
+//
+// "-n 'kube-system, istio-system'" arrives here as ["kube-system",
+// " istio-system"]: pflag splits the CSV without trimming. The classifier
+// trims too, but the rule is written to the config file and rendered by
+// Describe() from this slice, so normalizing at the point it is recorded is
+// what keeps the file and "kctx guard list" from showing the stray space.
+func trimAll(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, strings.TrimSpace(v))
+	}
+	return out
 }
 
 // validLevel reports whether the level is one kube-ctx understands.
