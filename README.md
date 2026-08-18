@@ -140,7 +140,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx bind [context]` | Bind a directory to a context; `cd` there switches |
 | `kctx guard add\|list\|remove` | Classify a context — or a namespace inside it — as production, without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
-| `kctx expiry\|expire\|certs [context...]` | What TLS certificates expire soon, across every cluster; exit `2` inside the window |
+| `kctx expiry\|expire\|certs [context...]` | What TLS certificates expire soon, across every cluster; exit `2` inside the window, or when a cluster could not be read |
 | `kctx shell [context]` | Subshell pinned to a context |
 | `kctx sessions [--clean]` | List the per-terminal kubeconfig copies, and tidy them |
 | `kctx exec <context> -- <cmd>` | Run one command against a context |
@@ -150,7 +150,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 
 Global flags: `--kubeconfig`, `-o color\|plain\|json`, `--no-color`, `-y/--yes`. An unknown `-o` value is an error rather than a silent fallback, so a script asking for `-o jsno` never gets a human table to parse.
 
-Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster or `expiry` finding a certificate inside the window, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
+Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster, or `expiry` finding a certificate inside the window or failing to read a cluster at all, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
 
 <br/>
 

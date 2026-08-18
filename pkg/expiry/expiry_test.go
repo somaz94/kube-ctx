@@ -85,7 +85,7 @@ func TestSweepRunsEveryContext(t *testing.T) {
 	now := time.Now()
 	s := &Sweeper{
 		RestConfig: func(string) (*rest.Config, error) { return &rest.Config{}, nil },
-		Fetch: func(context.Context, *rest.Config) ([]Item, []string, error) {
+		Fetch: func(context.Context, *rest.Config) ([]Item, []Skip, error) {
 			return []Item{{Namespace: "ns", Kind: KindTLSSecret, Name: "tls", NotAfter: now.Add(48 * time.Hour)}}, nil, nil
 		},
 	}
@@ -114,7 +114,7 @@ func TestSweepReportsAFailedContextWithoutLosingTheRest(t *testing.T) {
 			}
 			return &rest.Config{}, nil
 		},
-		Fetch: func(context.Context, *rest.Config) ([]Item, []string, error) { return nil, nil, nil },
+		Fetch: func(context.Context, *rest.Config) ([]Item, []Skip, error) { return nil, nil, nil },
 	}
 
 	results := s.Run(context.Background(), testConfig("broken", "fine"), nil)
@@ -172,7 +172,7 @@ func TestWithinKeepsUnreadableContexts(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	results := []Result{
 		{Context: "clean", Items: []Item{{Name: "far", NotAfter: now.AddDate(1, 0, 0)}}},
-		{Context: "partial", Skipped: []string{"secrets"}},
+		{Context: "partial", Skipped: []Skip{{Resource: "secrets", Blind: true}}},
 		{Context: "broken", Err: "unreachable"},
 	}
 
@@ -281,7 +281,7 @@ func TestWithinCallsDoNotAliasEachOther(t *testing.T) {
 // A refused secrets list has established no more than an unreachable cluster
 // did, and the exit status has to say so.
 func TestUnknownCatchesARefusedSecretsList(t *testing.T) {
-	refused := []Result{{Context: "prod", Skipped: []string{SkippedSecrets}}}
+	refused := []Result{{Context: "prod", Skipped: []Skip{{Resource: "secrets", Blind: true}}}}
 	if !Unknown(refused) {
 		t.Fatal("a refused secrets list did not register as unknown; the command would exit 0")
 	}
@@ -290,9 +290,47 @@ func TestUnknownCatchesARefusedSecretsList(t *testing.T) {
 	overlay := []Result{{
 		Context: "prod",
 		Items:   []Item{{Name: "tls"}},
-		Skipped: []string{"certificates.cert-manager.io: 503"},
+		Skipped: []Skip{{Resource: "certificates.cert-manager.io", Reason: "503"}},
 	}}
 	if Unknown(overlay) {
 		t.Error("a cert-manager failure took the exit status with it")
+	}
+}
+
+// The exit status is the whole contract, and both bugs found in review were a
+// single wrong cell in this table. Enumerated rather than sampled so a future
+// change to Expiring or Unknown has to face every combination at once.
+func TestExitStatusMatrix(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	due := Item{Name: "due", NotAfter: now.AddDate(0, 0, 5)}
+	far := Item{Name: "far", NotAfter: now.AddDate(2, 0, 0)}
+
+	tests := []struct {
+		name     string
+		result   Result
+		wantExit bool // true means the command should exit non-zero
+	}{
+		{"nothing near", Result{Context: "a", Items: []Item{far}}, false},
+		{"something due", Result{Context: "a", Items: []Item{due}}, true},
+		{"unreachable", Result{Context: "a", Err: "connection refused"}, true},
+		// Read nothing at all: the list is cluster-wide and issued once.
+		{"secrets refused", Result{Context: "a", Skipped: []Skip{{Resource: "secrets", Blind: true}}}, true},
+		// Every notAfter was already in hand; only the "who renews it" column
+		// was lost, so this must not fire the gate on its own.
+		{"overlay failed", Result{Context: "a", Items: []Item{far},
+			Skipped: []Skip{{Resource: "certificates.cert-manager.io", Reason: "503"}}}, false},
+		{"overlay failed and something due", Result{Context: "a", Items: []Item{due},
+			Skipped: []Skip{{Resource: "certificates.cert-manager.io", Reason: "503"}}}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			all := []Result{tt.result}
+			// Exactly what the command computes.
+			got := Expiring(Within(all, now, 30)) || Unknown(all)
+			if got != tt.wantExit {
+				t.Errorf("exit non-zero = %v, want %v", got, tt.wantExit)
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package expiry
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -209,7 +210,8 @@ func TestLiveTreatsUnauthorizedAsAFailureNotAGap(t *testing.T) {
 	if !apierrors.IsUnauthorized(err) {
 		t.Fatalf("err = %v, want an unauthorized error to reach the caller", err)
 	}
-	// The classification Live makes on it: forbidden degrades, 401 does not.
+	// The classification Live makes on it: forbidden is recorded as a blind
+	// skip, 401 is not tolerated at all.
 	if apierrors.IsForbidden(err) {
 		t.Error("unauthorized was classified as forbidden")
 	}
@@ -226,5 +228,60 @@ func TestLiveKeepsSecretsWhenTheOverlayFails(t *testing.T) {
 	got := merge(items, nil)
 	if len(got) != 1 || got[0].Kind != KindTLSSecret || got[0].Managed() {
 		t.Fatalf("items = %+v, want the unmanaged secret kept as-is", got)
+	}
+}
+
+// The gate is Live's Forbidden branch, not a constant. Asserting through
+// Unknown rather than on the record's contents is the whole point: a change
+// that carries the reason along, or renames the resource, must not be able to
+// take the exit status with it in silence.
+func TestARefusedSecretsListReachesTheExitStatus(t *testing.T) {
+	forbidden := apierrors.NewForbidden(
+		schema.GroupResource{Resource: "secrets"}, "", errors.New("no"))
+
+	skip, blocked, err := classifySecrets(forbidden)
+	if err != nil || !blocked {
+		t.Fatalf("classifySecrets = %+v, %v, %v; want a recorded skip", skip, blocked, err)
+	}
+	if !Unknown([]Result{{Context: "a", Skipped: []Skip{skip}}}) {
+		t.Fatal("what Live actually produces did not register as unknown; the command would exit 0")
+	}
+	// The reason is carried for the operator and must stay out of the decision.
+	if skip.Reason == "" {
+		t.Error("the skip carries no reason")
+	}
+}
+
+// 401 is not a skip at all: nothing authenticated, so the sweep has no
+// business reporting a context it never reached.
+func TestClassifySecretsFailsOnUnauthorized(t *testing.T) {
+	_, blocked, err := classifySecrets(apierrors.NewUnauthorized("token expired"))
+	if err == nil {
+		t.Fatal("unauthorized was tolerated")
+	}
+	if blocked {
+		t.Error("unauthorized was recorded as a skip rather than a failure")
+	}
+}
+
+func TestClassifySecretsPassesACleanRead(t *testing.T) {
+	skip, blocked, err := classifySecrets(nil)
+	if err != nil || blocked || skip.Blind {
+		t.Fatalf("classifySecrets(nil) = %+v, %v, %v", skip, blocked, err)
+	}
+}
+
+// A cert-manager failure is recorded but must never be Blind: every notAfter
+// was already read from the secrets before the overlay ran.
+func TestOverlayFailureIsNotBlind(t *testing.T) {
+	skip := Skip{Resource: "certificates.cert-manager.io", Reason: "503"}
+	if skip.Blind {
+		t.Fatal("an overlay failure was marked blind")
+	}
+	if Unknown([]Result{{Context: "a", Items: []Item{{Name: "x"}}, Skipped: []Skip{skip}}}) {
+		t.Error("an overlay failure took the exit status with it")
+	}
+	if got := skip.String(); got != "certificates.cert-manager.io: 503" {
+		t.Errorf("String() = %q", got)
 	}
 }

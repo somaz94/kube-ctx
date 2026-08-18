@@ -27,13 +27,6 @@ var certManagerCertificates = schema.GroupVersionResource{
 	Resource: "certificates",
 }
 
-// SkippedSecrets is what Live reports when it could not list secrets at all.
-//
-// Named rather than a bare string because the exit status keys on it: the list
-// is cluster-wide and all-or-nothing, so this means zero certificates were
-// read, not a partial answer.
-const SkippedSecrets = "secrets"
-
 // tlsSecretSelector is how the API server is asked for only the TLS secrets.
 //
 // Filtering server-side matters here: on a busy cluster the secret list is
@@ -47,30 +40,21 @@ const tlsSecretSelector = "type=" + string(corev1.SecretTypeTLS)
 // namespace and the secret each Certificate writes: every managed certificate
 // also exists as a TLS secret, so reading both and merging gives one row per
 // certificate that knows both when it expires and what will renew it.
-func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
+func Live(ctx context.Context, rc *rest.Config) ([]Item, []Skip, error) {
 	clientset, err := kubernetes.NewForConfig(rc)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build client: %w", err)
 	}
 
-	var skipped []string
+	var skipped []Skip
 
 	items, err := tlsSecrets(ctx, clientset)
-	switch {
-	case apierrors.IsForbidden(err):
-		// Recorded, not tolerated. The list is cluster-wide and issued once,
-		// so a refusal reads zero certificates rather than some of them —
-		// there is no namespaced fallback to fall back to. It is reported
-		// rather than returned as an error only so the row still names the
-		// context and says why; Unknown treats it as "nothing was
-		// established", which is what it is.
-		skipped = append(skipped, SkippedSecrets)
-	case err != nil:
-		// Unauthorized belongs here, not above. Forbidden means authenticated
-		// and scoped, so what was read is true; 401 means nothing authenticated
-		// and nothing was checked, and calling that a partial answer is how the
-		// report goes quiet at exactly the moment it stopped working.
+	skip, blocked, err := classifySecrets(err)
+	if err != nil {
 		return nil, nil, err
+	}
+	if blocked {
+		skipped = append(skipped, skip)
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(rc)
@@ -91,11 +75,39 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
 		// expiring tomorrow would vanish because cert-manager was unhealthy.
 		//
 		// The reason travels with it: reported bare, a timeout reads as a
-		// permission problem and sends the operator to check RBAC.
-		skipped = append(skipped, "certificates.cert-manager.io: "+err.Error())
+		// permission problem and sends the operator to check RBAC. It is not
+		// Blind — every notAfter was already in hand before this ran.
+		skipped = append(skipped, Skip{
+			Resource: "certificates.cert-manager.io",
+			Reason:   err.Error(),
+		})
 	}
 
 	return merge(items, managed), skipped, nil
+}
+
+// classifySecrets turns the secrets list error into either a fatal error or a
+// skip record.
+//
+// Split out of Live because this is the branch the exit status reads, and Live
+// itself cannot be driven without an API server — leaving the two together put
+// the one decision that matters in the one function no test could reach.
+func classifySecrets(err error) (Skip, bool, error) {
+	switch {
+	case err == nil:
+		return Skip{}, false, nil
+	case apierrors.IsForbidden(err):
+		// Blind, not partial. The list is cluster-wide and issued once, so a
+		// refusal reads zero certificates rather than some of them — there is
+		// no namespaced fallback to fall back to. Recorded rather than
+		// returned only so the row still names the context and says why.
+		return Skip{Resource: "secrets", Reason: err.Error(), Blind: true}, true, nil
+	default:
+		// Unauthorized lands here. Forbidden means authenticated and scoped;
+		// 401 means nothing authenticated at all, and the sweep has no
+		// business reporting a context it never reached.
+		return Skip{}, false, err
+	}
 }
 
 // tlsSecrets lists every kubernetes.io/tls secret and reads its leaf notAfter.

@@ -187,7 +187,13 @@ without asking — they are the release pipeline.
   it: the secret list is issued once, cluster-wide, with no namespaced
   fallback, so a refused one read *nothing* and counts as unknown, while a
   cert-manager failure costs only the "who renews this" column and leaves the
-  status alone — every `notAfter` was already in hand. For the same reason
+  status alone — every `notAfter` was already in hand. Which of the two a skip
+  is lives in `Skip.Blind`, a field, and never in its text: spelled as a name
+  the difference survives exactly until someone appends the reason for a better
+  warning, a change that reads like tidying and passes every test. The branch
+  that sets it is split out as `classifySecrets` for the same reason — `Live`
+  cannot be driven without an API server, so leaving the decision inside it put
+  the one thing the exit status depends on in the one function no test reaches. For the same reason
   `--all` widens only what is shown; letting it widen the threshold would exit
   2 on any cluster holding one TLS secret.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a

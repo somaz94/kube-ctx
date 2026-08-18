@@ -84,17 +84,41 @@ func (i Item) Expired(now time.Time) bool { return !i.NotAfter.After(now) }
 // Managed reports whether something is going to renew this without help.
 func (i Item) Managed() bool { return i.Issuer != "" }
 
+// Skip is one thing a sweep could not read.
+//
+// Blind is a field rather than a property of Resource because the exit status
+// reads it, and anything the exit status reads must not live in a string
+// meant for a human. Spelled as a name, the difference survives exactly until
+// somebody appends the reason to it for a better warning — a change that reads
+// like tidying, passes every test, and quietly reopens the gate.
+type Skip struct {
+	// Resource is what could not be read.
+	Resource string `json:"resource"`
+	// Reason is why, for the operator. Never load-bearing.
+	Reason string `json:"reason,omitempty"`
+	// Blind reports that nothing at all was read, so the caller has
+	// established no more than an unreachable cluster did.
+	Blind bool `json:"blind"`
+}
+
+// String renders the skip for a warning line.
+func (s Skip) String() string {
+	if s.Reason == "" {
+		return s.Resource
+	}
+	return s.Resource + ": " + s.Reason
+}
+
 // Result is one context's answer.
 type Result struct {
 	Context string `json:"context"`
 	Items   []Item `json:"items"`
 	// Err is the context failing outright — unreachable, or no credential.
 	Err string `json:"error,omitempty"`
-	// Skipped names the resource kinds this credential was not allowed to
-	// read. Reported rather than fatal: a token scoped to one namespace still
-	// gives a true answer about that namespace, and refusing to say anything
-	// because it cannot say everything is how a safety report gets ignored.
-	Skipped []string `json:"skipped,omitempty"`
+	// Skipped is what could not be read. Not uniformly tolerable: a skip
+	// marked Blind means nothing came back at all, which Unknown treats the
+	// way it treats an unreachable cluster, while the rest cost a column.
+	Skipped []Skip `json:"skipped,omitempty"`
 }
 
 // FetchFunc reads every certificate one cluster knows about.
@@ -102,7 +126,7 @@ type Result struct {
 // Injectable for the same reason probe's VersionFunc is: the sweep, the
 // windowing and the reporting are all testable without an API server, and only
 // this one function needs a live cluster.
-type FetchFunc func(ctx context.Context, rc *rest.Config) ([]Item, []string, error)
+type FetchFunc func(ctx context.Context, rc *rest.Config) ([]Item, []Skip, error)
 
 // Sweeper collects expiring certificates across contexts.
 type Sweeper struct {
@@ -239,24 +263,23 @@ func Expiring(results []Result) bool {
 	return false
 }
 
-// Unknown reports whether any context failed to answer.
+// Unknown reports whether any context failed to establish anything.
 //
 // It gates the exit status alongside Expiring, because the two together are
 // the only honest answer: a sweep that could not read a cluster has not
 // established that nothing is wrong there, and exiting 0 on it turns
 // "kctx expiry || notify-oncall" silent for the one case — every cluster
 // unreachable — where it most needs to fire.
+//
+// A blind skip counts the same as an outright failure. The two look different
+// and mean the same thing: nothing came back.
 func Unknown(results []Result) bool {
 	for _, r := range results {
 		if r.Err != "" {
 			return true
 		}
-		for _, kind := range r.Skipped {
-			// A refused secrets list is not a partial answer: it is issued
-			// once, cluster-wide, so nothing at all came back. That has
-			// established no more than an unreachable cluster did, and
-			// reporting it as clean is the same silence in a different shape.
-			if kind == SkippedSecrets {
+		for _, skip := range r.Skipped {
+			if skip.Blind {
 				return true
 			}
 		}

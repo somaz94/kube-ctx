@@ -84,10 +84,17 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 		return err
 	}
 
+	if opts.days < 0 {
+		return fmt.Errorf("--days must not be negative; %d would report only what has already expired", opts.days)
+	}
+
 	names, err = resolveContexts(a, cfg, names)
 	if err != nil {
 		return err
 	}
+	// Two spellings of one context sweep it twice and print it twice; aliases
+	// resolving here make that easy to do by accident.
+	names = dedupe(names)
 
 	sweeper := &expiry.Sweeper{
 		Fetch:       expiryFetch,
@@ -121,6 +128,13 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 		return err
 	}
 
+	// Over the unfiltered results, and outside the output branch: the warning
+	// is about what could be read, not about the window or the format, and a
+	// later display-side filter must not be able to take it away.
+	if err := reportSkipped(a, results); err != nil {
+		return err
+	}
+
 	// Two ways to be non-zero, and both have to be: something is due, or a
 	// cluster could not be read at all. A sweep that reached nothing has not
 	// established that nothing is wrong there, and "kctx expiry || notify"
@@ -137,6 +151,15 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 	}
 	return nil
 }
+
+// renewalGrace is how long past its own renewalTime a Certificate is given
+// before the renewal is called failed.
+//
+// cert-manager sets renewalTime to when it will start, not when it will
+// finish, so a DNS-01 order legitimately leaves it in the past for a while.
+// Without the grace, every healthy renewal in flight renders as the most
+// urgent row on the page, and a marker that cries wolf stops being read.
+const renewalGrace = 6 * time.Hour
 
 // everything is the window --all uses. Deliberately absurd rather than
 // unbounded: Within takes a day count, and a second code path for "no filter"
@@ -162,10 +185,14 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 	pal := a.palette()
 	rows := make([][]string, 0)
 	for _, r := range results {
-		if r.Err != "" {
+		// A context that established nothing gets a row saying so. Without
+		// this a refused secrets list rendered as a header and no rows, while
+		// exiting 2 — the exit status called it unreadable and the table
+		// showed a clean sweep.
+		if reason := unreadable(r); reason != "" {
 			rows = append(rows, []string{
 				boldIfCurrent(pal, r.Context, current), "-", "-",
-				pal.Red("unreadable"), pal.Dim(trimError(r.Err, 40)),
+				pal.Red("unreadable"), pal.Dim(trimError(reason, 40)),
 			})
 			continue
 		}
@@ -180,10 +207,7 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 		}
 	}
 
-	if err := renderOutput(a, []string{"CONTEXT", "NAMESPACE", "KIND", "NAME", "IN"}, rows, results); err != nil {
-		return err
-	}
-	return reportSkipped(a, results)
+	return renderOutput(a, []string{"CONTEXT", "NAMESPACE", "KIND", "NAME", "IN"}, rows, results)
 }
 
 // expiryCell renders the time left, colored by how much of it there is.
@@ -193,6 +217,12 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 // is red is one nobody reads twice.
 func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	if item.Expired(now) {
+		if item.Managed() {
+			// The same distinction (auto, overdue) draws, at the end it runs
+			// to: cert-manager owns this one and let it die, which is a
+			// different fix from a secret nobody ever automated.
+			return pal.Red("expired (auto)")
+		}
 		return pal.Red("expired")
 	}
 
@@ -203,7 +233,7 @@ func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	// Renewals do fail — DNS-01 broken, an ACME rate limit, an issuer deleted
 	// — and a renewal date that has passed with the certificate still here is
 	// the most urgent row on the page, not the quietest.
-	case item.Managed() && (item.RenewalTime == nil || item.RenewalTime.After(now)):
+	case item.Managed() && (item.RenewalTime == nil || now.Sub(*item.RenewalTime) < renewalGrace):
 		return pal.Dim(text + " (auto)")
 	case item.Managed():
 		// cert-manager meant to renew this and the date went by. Saying so is
@@ -217,14 +247,27 @@ func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	}
 }
 
-// reportSkipped names what the credential was not allowed to read, so a quiet
-// report is never mistaken for a clean one.
+// unreadable reports why a context established nothing, or "" when it did.
+func unreadable(r expiry.Result) string {
+	if r.Err != "" {
+		return r.Err
+	}
+	for _, skip := range r.Skipped {
+		if skip.Blind {
+			return skip.String()
+		}
+	}
+	return ""
+}
+
+// reportSkipped names what could not be read, so a quiet report is never
+// mistaken for a clean one.
 func reportSkipped(a *app, results []expiry.Result) error {
 	for _, r := range results {
-		for _, kind := range r.Skipped {
+		for _, skip := range r.Skipped {
 			_, err := fmt.Fprintf(a.errOut,
 				"warning: %s: could not read %s, so this context was not fully checked\n",
-				r.Context, kind)
+				r.Context, trimError(skip.String(), 120))
 			if err != nil {
 				return err
 			}

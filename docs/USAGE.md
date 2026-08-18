@@ -281,7 +281,7 @@ Exits non-zero when any probed context is unhealthy, so it can gate a script.
 kctx expiry                       # every context, the next 30 days
 kctx expiry prod-eks staging      # only these — aliases work here too
 kctx expiry -d 7                  # a tighter window
-kctx expiry --all                 # show every certificate, however far off
+kctx expiry --all                 # show every certificate, out to 200 years
 kctx expiry --timeout 30s         # per-cluster deadline (default 15s)
 kctx expiry --concurrency 16      # clusters read at once (default 8)
 kctx expiry -o json
@@ -308,12 +308,13 @@ The `IN` cell says how much time is left and how much of a problem that is:
 | Cell | Meaning |
 |---|---|
 | `10d (auto)` | dimmed — cert-manager is going to renew this one |
-| `3d (auto, overdue)` | red — cert-manager meant to renew it and the date went by |
+| `3d (auto, overdue)` | red — cert-manager meant to renew it and the date went by, with hours to spare |
+| `expired (auto)` | red — cert-manager owned it and let it die |
 | `5d` | red — under a week, and nothing is going to fix it for you |
 | `19d` | yellow — inside the window, unmanaged |
 | `expired` | red — already past `notAfter` |
 
-A managed certificate is dimmed rather than colored because cert-manager renewing next Tuesday is not something anyone has to do, and a report where every row is red is one nobody reads twice. It is dimmed only while its own `renewalTime` is still ahead of it, though: renewals fail — a broken DNS-01 solver, an ACME rate limit, an issuer that was deleted — and a renewal date that has passed with the certificate still sitting there is the most urgent row on the page, not the quietest. `(auto, overdue)` says which one you are looking at, because "cert-manager tried and failed" and "nobody ever automated this" need different fixes. Already-expired certificates are kept rather than filtered out as past: they are the most urgent rows on the page, and hiding them would make the report go quiet exactly when the outage starts.
+A managed certificate is dimmed rather than colored because cert-manager renewing next Tuesday is not something anyone has to do, and a report where every row is red is one nobody reads twice. It is dimmed only while its own `renewalTime` is still ahead of it, though: renewals fail — a broken DNS-01 solver, an ACME rate limit, an issuer that was deleted — and a renewal date that has passed with the certificate still sitting there is the most urgent row on the page, not the quietest. `(auto, overdue)` says which one you are looking at, because "cert-manager tried and failed" and "nobody ever automated this" need different fixes. It allows six hours of grace first: cert-manager sets `renewalTime` to when it will *start*, not when it will finish, so a DNS-01 order legitimately leaves that time in the past for a while, and a marker that fires on every healthy renewal in flight stops being read. Already-expired certificates are kept rather than filtered out as past: they are the most urgent rows on the page, and hiding them would make the report go quiet exactly when the outage starts.
 
 When something could not be read, stderr names it and the context still appears in the table, so a quiet report is never mistaken for a clean one:
 
@@ -454,7 +455,7 @@ Prints a wrapper function plus completions. With the hook installed, a switch ap
 |---|---|
 | `0` | Success |
 | `1` | kube-ctx itself failed: unreadable kubeconfig, unknown context, bad guard rule |
-| `2` | `doctor` reached the clusters and some are unhealthy, or `expiry` found something inside the window |
+| `2` | `doctor` reached the clusters and some are unhealthy, or `expiry` found something inside the window — or could not read a cluster at all |
 | `130` | You declined a confirmation, or closed the picker |
 | _n_ | `exec` passes the wrapped command's status through |
 | `128+`_sig_ | `exec`'s command was killed by a signal, the way a shell reports it |

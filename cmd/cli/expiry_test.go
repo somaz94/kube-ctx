@@ -24,13 +24,16 @@ func fixedNow(t *testing.T) time.Time {
 }
 
 // stubExpiry replaces the cluster read, the way newHarness stubs the picker.
-func stubExpiry(t *testing.T, items map[string][]expiry.Item, skipped []string) {
+func stubExpiry(t *testing.T, items map[string][]expiry.Item, skipped []expiry.Skip) {
 	t.Helper()
 	original := expiryFetch
 	// The sweeper hands the fetcher only a rest.Config, so the per-context
 	// answer is keyed off the host it was built for.
-	expiryFetch = func(_ context.Context, rc *rest.Config) ([]expiry.Item, []string, error) {
-		return items[rc.Host], skipped, nil
+	expiryFetch = func(_ context.Context, rc *rest.Config) ([]expiry.Item, []expiry.Skip, error) {
+		// A copy: sweepOne stamps the context onto each item, and two
+		// contexts pointing at one host would otherwise race on the map's
+		// own slice.
+		return append([]expiry.Item(nil), items[rc.Host]...), skipped, nil
 	}
 	t.Cleanup(func() { expiryFetch = original })
 }
@@ -103,7 +106,7 @@ func TestExpiryReportsTheAlreadyExpired(t *testing.T) {
 func TestExpiryTreatsARefusedSecretsListAsUnknown(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	fixedNow(t)
-	stubExpiry(t, nil, []string{expiry.SkippedSecrets})
+	stubExpiry(t, nil, []expiry.Skip{{Resource: "secrets", Blind: true}})
 
 	err := h.run("expiry", "dev")
 	if code := ExitCode(err); code != ExitUnhealthy {
@@ -123,7 +126,7 @@ func TestExpiryOverlayFailureIsNotUnknown(t *testing.T) {
 		"https://dev.example.com:6443": {
 			{Namespace: "ns", Kind: expiry.KindTLSSecret, Name: "tls", NotAfter: now.AddDate(1, 0, 0)},
 		},
-	}, []string{"certificates.cert-manager.io: context deadline exceeded"})
+	}, []expiry.Skip{{Resource: "certificates.cert-manager.io", Reason: "context deadline exceeded"}})
 
 	if err := h.run("expiry", "dev"); err != nil {
 		t.Fatalf("ExitCode = %d, want 0: every notAfter was read", ExitCode(err))
@@ -148,8 +151,64 @@ func TestExpiryMarksAnOverdueRenewal(t *testing.T) {
 	}, nil)
 
 	_ = h.run("expiry", "dev")
-	if !strings.Contains(h.stdout(), "(auto, overdue)") {
-		t.Errorf("stdout = %q, want the failed renewal called out", h.stdout())
+	out := h.stdout()
+	if !strings.Contains(out, "(auto, overdue)") {
+		t.Errorf("stdout = %q, want the failed renewal called out", out)
+	}
+	// And not dimmed as an ordinary managed row. Asserted on the whole cell so
+	// it does not pass merely because "(auto)" is a prefix of "(auto, overdue)".
+	if strings.Contains(out, "3d (auto)") {
+		t.Errorf("a failed renewal was dimmed as automatic: %q", out)
+	}
+}
+
+// cert-manager sets renewalTime to when it will start, so a renewal in flight
+// legitimately leaves it in the past. Firing on those makes the marker noise.
+func TestExpiryGivesAnInFlightRenewalGrace(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	justStarted := now.Add(-30 * time.Minute)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindCertificate, Name: "renewing", NotAfter: now.AddDate(0, 0, 10),
+				Issuer: "letsencrypt", RenewalTime: &justStarted},
+		},
+	}, nil)
+
+	_ = h.run("expiry", "dev")
+	if strings.Contains(h.stdout(), "overdue") {
+		t.Errorf("a renewal half an hour old was called overdue: %q", h.stdout())
+	}
+}
+
+// An expired managed certificate is cert-manager having owned it and let it
+// die — a different fix from a secret nobody ever automated.
+func TestExpiryMarksAnExpiredManagedCertificate(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindCertificate, Name: "dead", NotAfter: now.AddDate(0, 0, -1),
+				Issuer: "letsencrypt"},
+		},
+	}, nil)
+
+	_ = h.run("expiry", "dev")
+	if !strings.Contains(h.stdout(), "expired (auto)") {
+		t.Errorf("stdout = %q, want the dead managed certificate marked", h.stdout())
+	}
+}
+
+// A blind context must produce a row. Rendering a header and nothing else
+// while exiting 2 says "unreadable" in the status and "clean" on screen.
+func TestExpiryRendersARowForABlindContext(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	fixedNow(t)
+	stubExpiry(t, nil, []expiry.Skip{{Resource: "secrets", Reason: "forbidden", Blind: true}})
+
+	_ = h.run("expiry", "dev")
+	if !strings.Contains(h.stdout(), "unreadable") {
+		t.Errorf("stdout = %q, want a row saying the context could not be read", h.stdout())
 	}
 }
 
@@ -247,7 +306,7 @@ func TestExpiryExitsNonZeroWhenAContextCannotBeRead(t *testing.T) {
 	fixedNow(t)
 
 	original := expiryFetch
-	expiryFetch = func(context.Context, *rest.Config) ([]expiry.Item, []string, error) {
+	expiryFetch = func(context.Context, *rest.Config) ([]expiry.Item, []expiry.Skip, error) {
 		return nil, nil, errors.New("connection refused")
 	}
 	t.Cleanup(func() { expiryFetch = original })
@@ -258,25 +317,6 @@ func TestExpiryExitsNonZeroWhenAContextCannotBeRead(t *testing.T) {
 	}
 	if !strings.Contains(h.stdout(), "unreadable") {
 		t.Errorf("stdout = %q, want the context marked unreadable", h.stdout())
-	}
-}
-
-// A managed certificate whose renewal date has already passed is the most
-// urgent row on the page, not the quietest.
-func TestExpiryDoesNotDimAFailedRenewal(t *testing.T) {
-	h := newHarness(t, defaultSpec())
-	now := fixedNow(t)
-	overdue := now.AddDate(0, 0, -2)
-	stubExpiry(t, map[string][]expiry.Item{
-		"https://dev.example.com:6443": {
-			{Namespace: "ns", Kind: expiry.KindCertificate, Name: "stuck", NotAfter: now.AddDate(0, 0, 3),
-				Issuer: "letsencrypt", RenewalTime: &overdue},
-		},
-	}, nil)
-
-	_ = h.run("expiry", "dev")
-	if strings.Contains(h.stdout(), "(auto)") {
-		t.Errorf("a certificate cert-manager failed to renew was dimmed as automatic: %q", h.stdout())
 	}
 }
 
