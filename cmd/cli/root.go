@@ -196,6 +196,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		newBindCmd(a),
 		newGuardCmd(a),
 		newDoctorCmd(a),
+		newExpiryCmd(a),
 		newShellCmd(a),
 		newSessionsCmd(a),
 		newExecCmd(a),

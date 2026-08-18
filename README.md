@@ -31,6 +31,7 @@
 | **The same question, every cluster** | A `for` loop that switches and hopes | `kctx exec --all -- kubectl get nodes`, in parallel |
 | **Namespace list offline** | Fails when the API server is unreachable | Falls back to a cache and says so |
 | **Cluster health** | — | `kctx doctor`: reachability, version, expired certs and tokens |
+| **Certificates about to expire** | — | `kctx expiry`: every cluster's TLS secrets and cert-manager Certificates in one table |
 | **Adding someone's kubeconfig** | Hand-merge, or `--flatten` and hope the names do not clash | `kctx import`: colliding stanzas are disambiguated, never overwritten |
 | **Handing one context over** | Edit a copy by hand | `kctx export prod --flatten -f prod.yaml` |
 | **kubeconfig writes** | Re-emits the YAML | `clientcmd`, the same path `kubectl` uses — multi-file `$KUBECONFIG` safe |
@@ -113,6 +114,7 @@ kctx -                           # back to the previous context
 kctx ns kube-system              # namespace of the current context
 kctx list --wide                 # everything at a glance
 kctx doctor                      # what still works?
+kctx expiry                      # what runs out in the next 30 days?
 kctx exec prod-eks -- kubectl get nodes    # one command, no switch
 kctx exec --all -- kubectl get nodes       # every cluster, in parallel
 kctx bind dev                    # cd here later, and this terminal follows
@@ -138,6 +140,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx bind [context]` | Bind a directory to a context; `cd` there switches |
 | `kctx guard add\|list\|remove` | Classify a context — or a namespace inside it — as production, without writing a regex |
 | `kctx doctor [context...]` | Parallel health check; non-zero exit if anything is broken |
+| `kctx expiry\|expire\|certs [context...]` | What TLS certificates expire soon, across every cluster; exit `2` inside the window |
 | `kctx shell [context]` | Subshell pinned to a context |
 | `kctx sessions [--clean]` | List the per-terminal kubeconfig copies, and tidy them |
 | `kctx exec <context> -- <cmd>` | Run one command against a context |
@@ -147,7 +150,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 
 Global flags: `--kubeconfig`, `-o color\|plain\|json`, `--no-color`, `-y/--yes`. An unknown `-o` value is an error rather than a silent fallback, so a script asking for `-o jsno` never gets a human table to parse.
 
-Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
+Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster or `expiry` finding a certificate inside the window, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
 
 <br/>
 
@@ -188,6 +191,22 @@ kctx guard add --prefix prod- -n kube-system --confirm
 ```
 
 See [Configuration](docs/CONFIGURATION.md) for every field.
+
+<br/>
+
+## What expires next
+
+Certificates run out on a schedule nobody is watching. `kctx expiry` reads every `kubernetes.io/tls` secret in every context, in parallel, and reports what falls inside the next 30 days:
+
+```
+$ kctx expiry --days 30
+CONTEXT   NAMESPACE  KIND         NAME          IN
+prod-eks  istio      Certificate  gateway-cert  8d (auto)
+prod-eks  default    Secret/tls   legacy-api    19d
+staging   ingress    Secret/tls   wildcard      27d
+```
+
+The certificate is the unit, not whatever manages it — a secret pasted in by hand two years ago shows up next to a cert-manager `Certificate`. Where cert-manager is present its Certificates are folded in, which is what separates the rows that renew themselves (`(auto)`, dimmed) from the ones somebody has to act on. This is deliberately not `doctor`: nothing here is broken yet, which is the point of being told. Exit `2` inside the window makes it a cron gate — `kctx expiry --days 30 || notify-oncall`. See [Usage](docs/USAGE.md#kctx-expiry).
 
 <br/>
 

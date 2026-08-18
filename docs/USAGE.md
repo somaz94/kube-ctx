@@ -275,6 +275,65 @@ Exits non-zero when any probed context is unhealthy, so it can gate a script.
 
 <br/>
 
+## kctx expiry
+
+```bash
+kctx expiry                       # every context, the next 30 days
+kctx expiry prod-eks staging      # only these — aliases work here too
+kctx expiry -d 7                  # a tighter window
+kctx expiry --all                 # every certificate, however far off
+kctx expiry --timeout 30s         # per-cluster deadline (default 15s)
+kctx expiry --concurrency 16      # clusters read at once (default 8)
+kctx expiry -o json
+```
+
+```
+$ kctx expiry --days 30
+CONTEXT   NAMESPACE  KIND         NAME          IN
+prod-eks  istio      Certificate  gateway-cert  8d (auto)
+prod-eks  default    Secret/tls   legacy-api    19d
+staging   ingress    Secret/tls   wildcard      27d
+```
+
+Sweeps every context in parallel for the TLS certificates about to run out. `kctx expire` and `kctx certs` are the same command.
+
+**This is not `doctor`.** `doctor` asks whether a cluster works right now and calls a sick one a failure; `expiry` asks what breaks in N days, where nothing is wrong yet — which is the whole point of being told. Folding the two together would make a certificate with three weeks left report a sick cluster, and would turn `doctor` — one `GET /version` per context — into a namespace-wide list that fails for any credential allowed to reach the API but not read secrets.
+
+What is read is the certificate, not the resource managing it. Every `kubernetes.io/tls` secret carries the PEM, so `notAfter` is readable on a cluster with no CRD installed and without a guess about what issued anything. cert-manager `Certificate`s are then folded on top, keyed by the secret each one writes, because that is what says *who* renews a certificate and *when*. A managed row is renamed to the Certificate's own name: it is often not the secret's, and the Certificate is what an operator goes looking for.
+
+Only the first PEM block is parsed. A `tls.crt` commonly carries intermediates after the leaf and those outlive it, so reading the last block — or the maximum — would report a certificate as healthy for years after it stopped working.
+
+The `IN` cell says how much time is left and how much of a problem that is:
+
+| Cell | Meaning |
+|---|---|
+| `10d (auto)` | dimmed — cert-manager is going to renew this one |
+| `5d` | red — under a week, and nothing is going to fix it for you |
+| `19d` | yellow — inside the window, unmanaged |
+| `expired` | red — already past `notAfter` |
+
+A managed certificate is dimmed rather than colored because cert-manager renewing next Tuesday is not something anyone has to do, and a report where every row is red is one nobody reads twice. Already-expired certificates are kept rather than filtered out as past: they are the most urgent rows on the page, and hiding them would make the report go quiet exactly when the outage starts.
+
+A credential that is not allowed to list secrets does not fail the sweep. The context is still reported, and stderr names what could not be read:
+
+```
+warning: prod-eks: not allowed to read secrets, so this context is only partly checked
+```
+
+Partial beats silent — the same call `kctx ns` makes when it prefers a stale cache to an empty list, because a report that refuses to say anything because it cannot say everything is one people stop running. A missing cert-manager CRD is *not* reported as a gap: the secrets already carry every `notAfter`, so nothing was missed.
+
+Exits `2` when anything falls inside the window — the same code `doctor` uses for "the clusters answered and something needs doing", distinct from `1`, which is kube-ctx failing to run at all. That is what makes it usable as a cron gate:
+
+```bash
+kctx expiry --days 30 || notify-oncall
+```
+
+With nothing due it exits `0` and says so on stderr — `Nothing expires within 30 days.` — leaving stdout empty for whatever is downstream.
+
+Thirty days is the default because it is the shortest notice that is still actionable: it clears a month of change freezes, and it is longer than the 15 days before `notAfter` at which cert-manager renews by default, so a healthy managed certificate turns up here having already scheduled its own fix.
+
+<br/>
+
 ## kctx shell
 
 ```bash
@@ -391,7 +450,7 @@ Prints a wrapper function plus completions. With the hook installed, a switch ap
 |---|---|
 | `0` | Success |
 | `1` | kube-ctx itself failed: unreadable kubeconfig, unknown context, bad guard rule |
-| `2` | `doctor` reached the clusters and some are unhealthy |
+| `2` | `doctor` reached the clusters and some are unhealthy, or `expiry` found something inside the window |
 | `130` | You declined a confirmation, or closed the picker |
 | _n_ | `exec` passes the wrapped command's status through |
 | `128+`_sig_ | `exec`'s command was killed by a signal, the way a shell reports it |

@@ -559,6 +559,47 @@ check_bare_switch() {
   assert_eq "$LIVE" "$(current_context)" "... without switching"
 }
 
+# The expiry sweep against a real API server. The unit suite stubs the cluster
+# read entirely, so this is the only place the field selector, the secret
+# decode and the PEM parse are exercised against something that could disagree.
+check_expiry() {
+  section "Certificate expiry, read from a real cluster"
+
+  if ! command -v openssl >/dev/null 2>&1; then
+    skip "expiry against a live cluster" "openssl is required to mint a test certificate"
+    return 0
+  fi
+
+  # 10 days out: inside the default 30-day window, outside the 7-day one, so
+  # both the "found it" and the "--days narrows it" assertions are meaningful.
+  openssl req -x509 -newkey rsa:2048 -nodes -days 10 \
+    -subj "/CN=expiry.e2e.example.com" \
+    -keyout "$WORK/e2e-tls.key" -out "$WORK/e2e-tls.crt" >/dev/null 2>&1
+
+  kubectl --context "$LIVE" create namespace kctx-expiry >/dev/null 2>&1 || true
+  kubectl --context "$LIVE" -n kctx-expiry create secret tls e2e-cert \
+    --cert="$WORK/e2e-tls.crt" --key="$WORK/e2e-tls.key" >/dev/null 2>&1
+
+  capture kctx expiry "$LIVE" --days 30
+  assert_status 2 "expiry exits 2 when something is inside the window"
+  assert_contains "e2e-cert" "... naming the certificate"
+  assert_contains "kctx-expiry" "... and the namespace it lives in"
+
+  capture kctx expiry "$LIVE" --days 30 -o json
+  assert_status 2 "-o json exits the same way"
+  assert_eq "e2e-cert" "$(printf '%s' "$E2E_OUTPUT" | jq -r '.[0].items[0].name')" \
+    "-o json carries the item"
+  assert_eq "Secret/tls" "$(printf '%s' "$E2E_OUTPUT" | jq -r '.[0].items[0].kind')" \
+    "... classified as an unmanaged TLS secret, with no cert-manager installed"
+
+  # A window that excludes it must exit 0, or the command cannot gate a cron.
+  capture kctx expiry "$LIVE" --days 3
+  assert_status 0 "a narrower window exits 0"
+  assert_contains "Nothing expires within 3 days" "... and says so"
+
+  kubectl --context "$LIVE" delete namespace kctx-expiry --wait=false >/dev/null 2>&1 || true
+}
+
 check_guard() {
   section "Guards, on every route to a cluster"
 
@@ -886,6 +927,7 @@ main() {
   check_shell
   check_hook
   check_bare_switch
+  check_expiry
   check_guard
   check_alias
   check_bind

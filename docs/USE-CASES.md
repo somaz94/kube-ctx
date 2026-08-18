@@ -36,6 +36,14 @@ Situations kube-ctx was built for, and what it does about them.
 
 <br/>
 
+## The certificate that runs out on a Saturday
+
+**The problem.** Four clusters, and three things putting certificates into them: cert-manager for the ingress, sealed-secrets for what is checked in, external-secrets pulling the rest out of a vault. Each knows about its own and none of them knows about the others — and none of them knows anything at all about the wildcard somebody pasted in by hand two years ago. Nothing tells you what runs out, in which cluster, until a client gets a TLS error, usually on the weekend, from the one certificate that was never going to renew itself.
+
+**What kube-ctx does.** `kctx expiry` reads every `kubernetes.io/tls` secret in every context in parallel and reports what falls inside the next 30 days. The certificate is the unit of truth rather than whatever manages it, so the hand-pasted secret appears beside a cert-manager `Certificate` — and where cert-manager is present, its Certificates are folded in on top, which is what separates the rows that renew themselves (dimmed, `8d (auto)`) from the ones somebody has to act on. A credential that cannot list secrets narrows the answer instead of failing it: the context is still reported and stderr names what was skipped. It is not `doctor` — nothing here is broken yet, which is the whole point — and exit `2` inside the window makes `kctx expiry --days 30 || notify-oncall` a cron entry rather than a habit.
+
+<br/>
+
 ## The kubeconfig in your Downloads folder
 
 **The problem.** A colleague sends you the kubeconfig for a cluster you need today. Both it and yours were produced by `kubeadm`, so both call their cluster `kubernetes` and their user `kubernetes-admin`. `KUBECONFIG=mine:theirs kubectl config view --flatten` resolves that by last-writer-wins: the merge succeeds, and the contexts you already had now point at their API server. Nothing tells you.

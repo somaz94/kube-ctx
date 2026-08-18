@@ -29,7 +29,7 @@ make e2e-cluster-clean
 cmd/main.go              Entry point; maps errors onto exit codes
 cmd/cli/                 Cobra commands: root, ctx, ns, list, rename, delete,
                          import, export, alias, bind, guard, current, doctor,
-                         shell, sessions, exec, init, version
+                         shell, sessions, exec, expiry, init, version
                          (+ util, pick, session helpers)
 pkg/kubeconfig/          clientcmd-backed load / save / backup / encode
 pkg/transfer/            Merge and extract contexts between kubeconfigs
@@ -38,6 +38,7 @@ pkg/namespaces/          Namespace listing (live API + cache)
 pkg/config/              kube-ctx's own config.yaml: aliases, guards, bindings
 pkg/guard/               Regex classification of contexts (safe/warn/danger)
 pkg/probe/               Parallel cluster health checks
+pkg/expiry/              Parallel sweep for certificates about to run out
 pkg/picker/              The interactive fuzzy selector
 pkg/shellenv/            Per-shell kubeconfig sessions and hook scripts
 pkg/paths/               XDG config / cache / state directory resolution
@@ -164,9 +165,26 @@ without asking — they are the release pipeline.
   and two questions in one command became ordinary once a guarded context and
   a guarded namespace started being asked separately. It is a pointer so
   `promptingOnStderr`'s copy shares the position.
+- **Expiry is not doctor** (`pkg/expiry`) — `doctor` asks whether a cluster
+  works now and calls a sick one a failure; `expiry` asks what breaks in N
+  days, where nothing is wrong yet. Folding them together would make a
+  certificate with three weeks left report a sick cluster, and would turn
+  doctor — one `GET /version` per context — into a namespace-wide list that
+  fails for any credential allowed to reach the API but not read secrets. The
+  unit of truth is the certificate, not the resource managing it: every
+  `kubernetes.io/tls` secret carries the PEM, so `notAfter` is readable with no
+  CRD installed, and cert-manager `Certificate`s are folded on top keyed by the
+  secret each writes — that is what says who renews it, and why a managed row
+  is renamed to the Certificate rather than the secret. Only the first PEM
+  block is parsed: a `tls.crt` carries intermediates that outlive the leaf, so
+  reading the last would call a dead certificate healthy for years. A
+  credential that cannot list secrets degrades to a partial report with the gap
+  named — the same call `pkg/namespaces` makes preferring a stale cache to an
+  empty list — while a missing cert-manager CRD is *not* a gap, since the
+  secrets already carry every `notAfter`.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
-  sick cluster, `130` the user declined. Distinct because the uses are shell
-  one-liners: `&&` must not proceed past a declined guard, and `||` must not
+  sick cluster or expiry found something due, `130` the user declined.
+  Distinct because the uses are shell one-liners: `&&` must not proceed past a declined guard, and `||` must not
   page on a typo'd `--kubeconfig`.
 - **A bare name switches** (`NewRootCmd`, `cmd/cli/root.go`) — `kctx prod` is
   `kctx ctx prod`, because that is what fingers trained on kubectx type first

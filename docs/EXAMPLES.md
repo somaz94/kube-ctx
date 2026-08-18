@@ -177,6 +177,48 @@ The kubeconfig is backed up before the delete; `$XDG_STATE_HOME/kube-ctx/backups
 
 <br/>
 
+## What expires in the next month
+
+```bash
+$ kctx expiry --days 30
+CONTEXT   NAMESPACE  KIND         NAME          IN
+prod-eks  istio      Certificate  gateway-cert  8d (auto)
+prod-eks  default    Secret/tls   legacy-api    19d
+staging   ingress    Secret/tls   wildcard      27d
+warning: dev-kind: not allowed to read secrets, so this context is only partly checked
+```
+
+Three rows and one of them is work. `gateway-cert` is dimmed and marked `(auto)` because cert-manager is going to renew it — it is here so you can see it was scheduled, not so you do something about it. The other two are plain TLS secrets nothing owns, and they are colored: red under a week, yellow above it. The warning is `dev-kind` answering with a credential that cannot list secrets; the context is still reported rather than dropped, so a quiet report is never mistaken for a clean one.
+
+Nothing due is a success, and it says so on stderr — stdout stays empty for whatever is downstream:
+
+```bash
+$ kctx expiry --days 7
+Nothing expires within 7 days.
+$ echo $?
+0
+```
+
+Which is what makes it a gate. Anything inside the window exits `2`, distinct from the `1` that means kube-ctx itself failed, so a cron entry can tell "a certificate is running out" apart from "the kubeconfig moved":
+
+```bash
+# crontab: every morning at 08:00
+0 8 * * *  kctx expiry --days 30 || notify-oncall "certificates expiring"
+
+# or as a CI step, keeping the detail for the message
+kctx expiry --days 14 -o json > certs.json || post-to-chat < certs.json
+```
+
+For the whole inventory rather than the urgent end, `--all` drops the window — useful with `-o json` when the question is which certificates nothing is renewing:
+
+```bash
+$ kctx expiry --all -o json | jq -r '.[].items[] | select(.issuer == null) | "\(.context) \(.namespace)/\(.name) \(.notAfter)"'
+prod-eks default/legacy-api 2026-09-06T09:31:00Z
+staging ingress/wildcard 2026-09-14T11:02:00Z
+```
+
+<br/>
+
 ## Take on a kubeconfig someone sent you
 
 ```bash
@@ -260,6 +302,9 @@ $ kctx shell p
 ```bash
 # fail a pipeline when a cluster is unreachable
 kctx doctor prod-eks --timeout 5s || exit 1
+
+# fail a nightly job when a certificate is inside the window (exit 2)
+kctx expiry --days 30 || notify-oncall
 
 # JSON everywhere
 kctx list -o json | jq -r '.[] | select(.Current) | .Name'
