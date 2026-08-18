@@ -3,11 +3,13 @@ package expiry
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -272,16 +274,38 @@ func TestClassifySecretsPassesACleanRead(t *testing.T) {
 }
 
 // A cert-manager failure is recorded but must never be Blind: every notAfter
-// was already read from the secrets before the overlay ran.
+// was already read from the secrets before the overlay ran. Asserting through
+// Unknown on what Live actually produces, rather than on a hand-built literal,
+// is the point — a Blind added to the branch must fail here.
 func TestOverlayFailureIsNotBlind(t *testing.T) {
-	skip := Skip{Resource: "certificates.cert-manager.io", Reason: "503"}
+	skip, blocked := classifyOverlay(apierrors.NewServiceUnavailable("503"))
+	if !blocked {
+		t.Fatal("an overlay failure was not recorded at all")
+	}
 	if skip.Blind {
 		t.Fatal("an overlay failure was marked blind")
 	}
 	if Unknown([]Result{{Context: "a", Items: []Item{{Name: "x"}}, Skipped: []Skip{skip}}}) {
 		t.Error("an overlay failure took the exit status with it")
 	}
-	if got := skip.String(); got != "certificates.cert-manager.io: 503" {
-		t.Errorf("String() = %q", got)
+	// The reason is carried for the operator: a timeout reported bare reads as
+	// a permission problem.
+	if !strings.Contains(skip.String(), "certificates.cert-manager.io") || skip.Reason == "" {
+		t.Errorf("String() = %q", skip.String())
+	}
+}
+
+// cert-manager not being installed is not a gap in the answer — the secrets
+// already carry every notAfter — so it must not be reported as one.
+func TestOverlayRecordsNothingWhenCertManagerIsAbsent(t *testing.T) {
+	absent := []error{
+		nil,
+		apierrors.NewNotFound(certManagerCertificates.GroupResource(), ""),
+		&apimeta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "cert-manager.io", Kind: "Certificate"}},
+	}
+	for _, err := range absent {
+		if skip, blocked := classifyOverlay(err); blocked {
+			t.Errorf("classifyOverlay(%v) recorded %+v, want nothing", err, skip)
+		}
 	}
 }

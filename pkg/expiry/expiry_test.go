@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +46,41 @@ func testConfig(names ...string) *clientcmdapi.Config {
 		cfg.Contexts[name] = &clientcmdapi.Context{Cluster: "c", AuthInfo: "u"}
 	}
 	return cfg
+}
+
+// A cancelled sweep must stop at the queue, not work through every remaining
+// context: with a concurrency limit most contexts are waiting for a slot, and
+// an uncancellable wait keeps contacting clusters long after the caller left.
+func TestRunStopsWhenTheContextIsCancelled(t *testing.T) {
+	names := make([]string, 0, 20)
+	for i := range 20 {
+		names = append(names, fmt.Sprintf("ctx-%02d", i))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	s := &Sweeper{
+		Concurrency: 1,
+		RestConfig:  func(string) (*rest.Config, error) { return &rest.Config{}, nil },
+		Fetch: func(context.Context, *rest.Config) ([]Item, []Skip, error) {
+			return nil, nil, nil
+		},
+	}
+
+	got := s.Run(ctx, testConfig(names...), nil)
+	if len(got) != len(names) {
+		t.Fatalf("got %d results, want one per context", len(got))
+	}
+	var cancelled int
+	for _, r := range got {
+		if strings.Contains(r.Err, context.Canceled.Error()) {
+			cancelled++
+		}
+	}
+	if cancelled == 0 {
+		t.Error("no result reports the cancellation")
+	}
 }
 
 func TestCertNotAfterReadsTheLeaf(t *testing.T) {

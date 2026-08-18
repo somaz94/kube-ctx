@@ -48,8 +48,8 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []Skip, error) {
 
 	var skipped []Skip
 
-	items, err := tlsSecrets(ctx, clientset)
-	skip, blocked, err := classifySecrets(err)
+	items, listErr := tlsSecrets(ctx, clientset)
+	skip, blocked, err := classifySecrets(listErr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -63,24 +63,8 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []Skip, error) {
 	}
 
 	managed, err := certManagerOverlay(ctx, dynamicClient)
-	switch {
-	case apierrors.IsNotFound(err), apimeta.IsNoMatchError(err):
-		// cert-manager is simply not installed. Not a gap in the answer — the
-		// secrets already carry every notAfter — so it is not reported as one.
-	case err != nil:
-		// Every other overlay failure — forbidden, a webhook down, the
-		// aggregated API returning 503, this context running out of deadline —
-		// costs only the "who renews this" column. Returning the error instead
-		// would throw away every notAfter already read, so a certificate
-		// expiring tomorrow would vanish because cert-manager was unhealthy.
-		//
-		// The reason travels with it: reported bare, a timeout reads as a
-		// permission problem and sends the operator to check RBAC. It is not
-		// Blind — every notAfter was already in hand before this ran.
-		skipped = append(skipped, Skip{
-			Resource: "certificates.cert-manager.io",
-			Reason:   err.Error(),
-		})
+	if skip, blocked := classifyOverlay(err); blocked {
+		skipped = append(skipped, skip)
 	}
 
 	return merge(items, managed), skipped, nil
@@ -110,13 +94,47 @@ func classifySecrets(err error) (Skip, bool, error) {
 	}
 }
 
+// classifyOverlay turns the cert-manager list error into a skip record, or
+// into nothing when cert-manager is simply not installed — that is not a gap
+// in the answer, since the secrets already carry every notAfter.
+//
+// Split out of Live for the same reason classifySecrets is, one step further
+// on: this is the branch that must never reach the exit status, and Live
+// cannot be driven without an API server. Left inline, a Blind added here
+// while tidying would pass every test and make an unhealthy cert-manager
+// enough to fail a sweep that read every certificate it went for.
+func classifyOverlay(err error) (Skip, bool) {
+	switch {
+	case err == nil, apierrors.IsNotFound(err), apimeta.IsNoMatchError(err):
+		return Skip{}, false
+	default:
+		// Every other overlay failure — forbidden, a webhook down, the
+		// aggregated API returning 503, this context running out of deadline —
+		// costs only the "who renews this" column. Returning the error instead
+		// would throw away every notAfter already read, so a certificate
+		// expiring tomorrow would vanish because cert-manager was unhealthy.
+		//
+		// The reason travels with it: reported bare, a timeout reads as a
+		// permission problem and sends the operator to check RBAC. It is not
+		// Blind — every notAfter was already in hand before this ran.
+		return Skip{
+			Resource: "certificates.cert-manager.io",
+			Reason:   err.Error(),
+		}, true
+	}
+}
+
 // tlsSecrets lists every kubernetes.io/tls secret and reads its leaf notAfter.
 func tlsSecrets(ctx context.Context, clientset kubernetes.Interface) ([]Item, error) {
 	list, err := clientset.CoreV1().Secrets(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 		FieldSelector: tlsSecretSelector,
 	})
 	if err != nil {
-		return nil, err
+		// Wrapped, not returned bare: it reaches the operator through
+		// Result.Err or a skip reason, where "forbidden" alone does not say
+		// which call was refused. classifySecrets reads it through
+		// apierrors.IsForbidden, which unwraps with errors.As.
+		return nil, fmt.Errorf("list tls secrets: %w", err)
 	}
 
 	items := make([]Item, 0, len(list.Items))

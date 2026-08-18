@@ -193,7 +193,10 @@ without asking — they are the release pipeline.
   warning, a change that reads like tidying and passes every test. The branch
   that sets it is split out as `classifySecrets` for the same reason — `Live`
   cannot be driven without an API server, so leaving the decision inside it put
-  the one thing the exit status depends on in the one function no test reaches. For the same reason
+  the one thing the exit status depends on in the one function no test reaches.
+  Both arms are out, not one: `classifyOverlay` is the mirror image, where the
+  hazard is a `Blind` *added* while tidying, failing a sweep that read every
+  certificate it went for. For the same reason
   `--all` widens only what is shown; letting it widen the threshold would exit
   2 on any cluster holding one TLS secret.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a

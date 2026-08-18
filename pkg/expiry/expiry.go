@@ -123,6 +123,11 @@ type Result struct {
 
 // FetchFunc reads every certificate one cluster knows about.
 //
+// The sweeper takes ownership of the returned slice: it stamps the context
+// name onto each item in place, so an implementation must not hand back a
+// slice it shares with another call. Two contexts backed by one array would
+// race, and each would end up named after whichever finished last.
+//
 // Injectable for the same reason probe's VersionFunc is: the sweep, the
 // windowing and the reporting are all testable without an API server, and only
 // this one function needs a live cluster.
@@ -293,9 +298,12 @@ func Unknown(results []Result) bool {
 // it, and those outlive the leaf, so taking the last or the maximum would
 // report a certificate as healthy for years after it stopped working.
 func certNotAfter(pemData []byte) (time.Time, error) {
-	for rest := pemData; len(rest) > 0; {
+	// Named remaining, not rest: k8s.io/client-go/rest is imported here, and a
+	// loop variable shadowing it compiles until the first edit that needs the
+	// package.
+	for remaining := pemData; len(remaining) > 0; {
 		var block *pem.Block
-		block, rest = pem.Decode(rest)
+		block, remaining = pem.Decode(remaining)
 		if block == nil {
 			break
 		}

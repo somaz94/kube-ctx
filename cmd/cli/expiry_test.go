@@ -10,6 +10,8 @@ import (
 
 	"k8s.io/client-go/rest"
 
+	"github.com/somaz94/kube-ctx/internal/testutil"
+
 	"github.com/somaz94/kube-ctx/pkg/expiry"
 )
 
@@ -322,6 +324,35 @@ func TestExpiryExitsNonZeroWhenAContextCannotBeRead(t *testing.T) {
 
 // render measures a cell's width over the whole string, so an embedded newline
 // would set its column to the length of the entire client-go error.
+// A negative window would report only what has already expired, which reads as
+// a clean sweep on a cluster whose certificate expires tomorrow.
+func TestExpiryRejectsANegativeWindow(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	// Spelled "--days=-1": normalizeArgs rewrites a bare "-1" into the history
+	// shorthand before cobra sees it, wherever it sits.
+	err := h.run("expiry", "--days=-1")
+	if err == nil {
+		t.Fatal("a negative window was accepted")
+	}
+	if !strings.Contains(err.Error(), "must not be negative") {
+		t.Errorf("err = %v, want the window rejected by name", err)
+	}
+}
+
+func TestExpiryEmptyKubeconfig(t *testing.T) {
+	h := newHarness(t, testutil.Spec{})
+
+	if err := h.run("expiry"); err != nil {
+		t.Fatalf("expiry: %v", err)
+	}
+	// Nothing to sweep is not a sick cluster: exit 2 here would page on an
+	// empty kubeconfig.
+	if !strings.Contains(h.stderr(), "No contexts") {
+		t.Errorf("stderr = %q", h.stderr())
+	}
+}
+
 func TestTrimErrorCutsAtTheFirstNewline(t *testing.T) {
 	got := trimError("connection refused\nDid you mean something else?\nstack trace", 40)
 	if strings.Contains(got, "\n") {

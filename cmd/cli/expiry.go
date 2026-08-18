@@ -207,7 +207,10 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 		}
 	}
 
-	return renderOutput(a, []string{"CONTEXT", "NAMESPACE", "KIND", "NAME", "IN"}, rows, results)
+	// renderTable, not renderOutput: runExpiry has already branched on -o json
+	// and written it, so the seam's JSON arm cannot fire from here. Left as
+	// renderOutput it reads as if this command's JSON support lived here.
+	return renderTable(a, []string{"CONTEXT", "NAMESPACE", "KIND", "NAME", "IN"}, rows)
 }
 
 // expiryCell renders the time left, colored by how much of it there is.
