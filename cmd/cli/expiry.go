@@ -41,8 +41,12 @@ func newExpiryCmd(a *app) *cobra.Command {
 			"This is not doctor. doctor asks whether a cluster works right now and\n" +
 			"calls a sick one a failure; nothing here is broken yet, which is the\n" +
 			"whole point of being told about it.\n\n" +
-			"Exits 2 when anything falls inside the window, so it can gate a cron:\n" +
-			"  kctx expiry --days 30 || notify-oncall",
+			"Exits 2 when anything falls inside the window — or when a cluster\n" +
+			"could not be read at all, since a sweep that reached nothing has not\n" +
+			"established that nothing is wrong there. So it can gate a cron:\n" +
+			"  kctx expiry --days 30 || notify-oncall\n\n" +
+			"--all widens what is shown, never what counts as due: the exit status\n" +
+			"stays keyed to --days.",
 		ValidArgsFunction: completeContextList(a),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExpiry(a, args, expiryOptions{
@@ -98,22 +102,31 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 	results := sweeper.Run(ctx, cfg, names)
 
 	now := timeNow()
-	days := opts.days
+
+	// The window that counts as due is always --days. --all only widens what
+	// is shown; letting it widen the threshold too would exit 2 on any cluster
+	// holding a single TLS secret, which is not what "something is due" means.
+	due := expiry.Within(results, now, opts.days)
+
+	shown := due
 	if opts.all {
-		// Far enough out that "--all" means all without a second code path.
-		days = 100 * 365
+		shown = expiry.Within(results, now, everything)
 	}
-	results = expiry.Within(results, now, days)
 
 	if a.jsonOutput() {
-		if err := writeJSON(a, results); err != nil {
+		if err := writeJSON(a, shown); err != nil {
 			return err
 		}
-	} else if err := renderExpiryTable(a, cfg.CurrentContext, results, now, opts); err != nil {
+	} else if err := renderExpiryTable(a, cfg.CurrentContext, shown, now, opts); err != nil {
 		return err
 	}
 
-	if expiry.Expiring(results) {
+	// Two ways to be non-zero, and both have to be: something is due, or a
+	// cluster could not be read at all. A sweep that reached nothing has not
+	// established that nothing is wrong there, and "kctx expiry || notify"
+	// going quiet when every cluster is unreachable is the failure mode this
+	// command exists to prevent.
+	if expiry.Expiring(due) || expiry.Unknown(shown) {
 		// The same separation doctor makes: 2 is "the clusters answered and
 		// something needs doing", distinct from 1, which is kube-ctx failing
 		// to run at all. Silent, because the table already said what.
@@ -122,9 +135,18 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 	return nil
 }
 
+// everything is the window --all uses. Deliberately absurd rather than
+// unbounded: Within takes a day count, and a second code path for "no filter"
+// would be one more thing to keep in step with the first.
+const everything = 200 * 365
+
 // renderExpiryTable prints one row per expiring certificate.
 func renderExpiryTable(a *app, current string, results []expiry.Result, now time.Time, opts expiryOptions) error {
 	if len(results) == 0 {
+		if opts.all {
+			_, err := fmt.Fprintln(a.errOut, "No certificates found.")
+			return err
+		}
 		_, err := fmt.Fprintf(a.errOut, "Nothing expires within %d days.\n", opts.days)
 		return err
 	}
@@ -135,7 +157,7 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 		if r.Err != "" {
 			rows = append(rows, []string{
 				contextCell(pal, r.Context, current), "-", "-",
-				pal.Red("unreadable"), pal.Dim(trimTo(r.Err, 40)),
+				pal.Red("unreadable"), pal.Dim(trimError(r.Err, 40)),
 			})
 			continue
 		}
@@ -156,14 +178,6 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 	return reportSkipped(a, results)
 }
 
-// contextCell bolds the context the user is currently on.
-func contextCell(pal render.Palette, name, current string) string {
-	if name == current {
-		return pal.Bold(name)
-	}
-	return name
-}
-
 // expiryCell renders the time left, colored by how much of it there is.
 //
 // A managed certificate is dimmed rather than colored: cert-manager renewing
@@ -177,7 +191,11 @@ func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	left := item.In(now)
 	text := fmt.Sprintf("%dd", int(left.Hours()/24))
 	switch {
-	case item.Managed():
+	// Dimmed only while cert-manager's own schedule is still ahead of it.
+	// Renewals do fail — DNS-01 broken, an ACME rate limit, an issuer deleted
+	// — and a renewal date that has passed with the certificate still here is
+	// the most urgent row on the page, not the quietest.
+	case item.Managed() && (item.RenewalTime == nil || item.RenewalTime.After(now)):
 		return pal.Dim(text + " (auto)")
 	case left < 7*24*time.Hour:
 		return pal.Red(text)
@@ -200,12 +218,4 @@ func reportSkipped(a *app, results []expiry.Result) error {
 		}
 	}
 	return nil
-}
-
-// trimTo shortens a message to fit a table cell.
-func trimTo(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n-1] + "…"
 }

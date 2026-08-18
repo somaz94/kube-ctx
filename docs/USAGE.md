@@ -281,7 +281,7 @@ Exits non-zero when any probed context is unhealthy, so it can gate a script.
 kctx expiry                       # every context, the next 30 days
 kctx expiry prod-eks staging      # only these — aliases work here too
 kctx expiry -d 7                  # a tighter window
-kctx expiry --all                 # every certificate, however far off
+kctx expiry --all                 # show every certificate, however far off
 kctx expiry --timeout 30s         # per-cluster deadline (default 15s)
 kctx expiry --concurrency 16      # clusters read at once (default 8)
 kctx expiry -o json
@@ -322,11 +322,13 @@ warning: prod-eks: not allowed to read secrets, so this context is only partly c
 
 Partial beats silent — the same call `kctx ns` makes when it prefers a stale cache to an empty list, because a report that refuses to say anything because it cannot say everything is one people stop running. A missing cert-manager CRD is *not* reported as a gap: the secrets already carry every `notAfter`, so nothing was missed.
 
-Exits `2` when anything falls inside the window — the same code `doctor` uses for "the clusters answered and something needs doing", distinct from `1`, which is kube-ctx failing to run at all. That is what makes it usable as a cron gate:
+Exits `2` when anything falls inside the window — the same code `doctor` uses for "the clusters answered and something needs doing", distinct from `1`, which is kube-ctx failing to run at all. It also exits `2` when a context could not be read at all, because a sweep that reached nothing has not established that nothing is wrong there, and a gate that goes quiet when every cluster is unreachable is worse than no gate. That is what makes it usable as a cron gate:
 
 ```bash
 kctx expiry --days 30 || notify-oncall
 ```
+
+`--all` widens what is shown and deliberately not what counts as due: the exit status stays keyed to `--days`, or any cluster holding a single TLS secret would exit `2` and the gate would mean nothing.
 
 With nothing due it exits `0` and says so on stderr — `Nothing expires within 30 days.` — leaving stdout empty for whatever is downstream.
 

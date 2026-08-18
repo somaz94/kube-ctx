@@ -181,7 +181,13 @@ without asking — they are the release pipeline.
   credential that cannot list secrets degrades to a partial report with the gap
   named — the same call `pkg/namespaces` makes preferring a stale cache to an
   empty list — while a missing cert-manager CRD is *not* a gap, since the
-  secrets already carry every `notAfter`.
+  secrets already carry every `notAfter`. Two things gate the exit status, not
+  one: something due, *or* a context that could not be read — a sweep that
+  reached nothing has not established that nothing is wrong there, and
+  `kctx expiry || notify` going quiet when every cluster is unreachable is the
+  failure this command exists to prevent. For the same reason `--all` widens
+  only what is shown; letting it widen the threshold would exit 2 on any
+  cluster holding one TLS secret.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
   sick cluster or expiry found something due, `130` the user declined.
   Distinct because the uses are shell one-liners: `&&` must not proceed past a declined guard, and `||` must not

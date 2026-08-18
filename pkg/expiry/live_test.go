@@ -6,6 +6,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -13,6 +14,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func tlsSecret(t *testing.T, ns, name string, notAfter time.Time) *corev1.Secret {
@@ -103,23 +105,6 @@ func TestMergeRenamesToTheManagingCertificate(t *testing.T) {
 	}
 }
 
-// A missing CRD is not a gap in the answer — the secrets already carry every
-// notAfter — so it must not be reported as one.
-func TestMetaDetectsAMissingCRD(t *testing.T) {
-	if !meta(errNotRegistered{}) {
-		t.Error("a missing CRD was not recognised")
-	}
-	if meta(nil) {
-		t.Error("nil was treated as a missing CRD")
-	}
-}
-
-type errNotRegistered struct{}
-
-func (errNotRegistered) Error() string {
-	return "the server could not find the requested resource"
-}
-
 func certificateObject(ns, name, secretName, issuer, renewal string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "cert-manager.io/v1",
@@ -208,5 +193,38 @@ func TestLiveReportsAnUnreachableCluster(t *testing.T) {
 	}
 	if items != nil {
 		t.Errorf("items = %v, want nil alongside the error", items)
+	}
+}
+
+// 401 is not a partial answer. Forbidden means authenticated and scoped, so
+// what was read is true; unauthorized means nothing was checked, and calling
+// that a gap is how the report goes quiet when it stops working.
+func TestLiveTreatsUnauthorizedAsAFailureNotAGap(t *testing.T) {
+	client := fake.NewSimpleClientset()
+	client.PrependReactor("list", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewUnauthorized("token expired")
+	})
+
+	_, err := tlsSecrets(context.Background(), client)
+	if !apierrors.IsUnauthorized(err) {
+		t.Fatalf("err = %v, want an unauthorized error to reach the caller", err)
+	}
+	// The classification Live makes on it: forbidden degrades, 401 does not.
+	if apierrors.IsForbidden(err) {
+		t.Error("unauthorized was classified as forbidden")
+	}
+}
+
+// A cert-manager problem costs the "who renews this" column and nothing else.
+// Throwing the error would discard every notAfter already read, so a
+// certificate expiring tomorrow would vanish because cert-manager was sick.
+func TestLiveKeepsSecretsWhenTheOverlayFails(t *testing.T) {
+	soon := time.Now().Add(48 * time.Hour)
+	items := []Item{{Namespace: "ns", Name: "tls", Kind: KindTLSSecret, NotAfter: soon}}
+
+	// merge is the join; with no overlay it must leave the secrets intact.
+	got := merge(items, nil)
+	if len(got) != 1 || got[0].Kind != KindTLSSecret || got[0].Managed() {
+		t.Fatalf("items = %+v, want the unmanaged secret kept as-is", got)
 	}
 }

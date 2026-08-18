@@ -203,3 +203,52 @@ func TestManagedDistinguishesWhoHasToAct(t *testing.T) {
 		t.Error("a cert-manager Certificate reported itself as unmanaged")
 	}
 }
+
+// A sweep that could not read a cluster has not established that nothing is
+// wrong there. Answering 0 turns "kctx expiry || notify" silent for the one
+// case — every cluster unreachable — where it most needs to fire.
+func TestUnknownCatchesAFailedContext(t *testing.T) {
+	failed := []Result{{Context: "prod", Err: "connection refused"}}
+
+	if Expiring(failed) {
+		t.Error("a failed context reported something expiring")
+	}
+	if !Unknown(failed) {
+		t.Fatal("a failed context did not register as unknown; the command would exit 0")
+	}
+	if Unknown([]Result{{Context: "prod", Items: []Item{{Name: "x"}}}}) {
+		t.Error("a healthy context registered as unknown")
+	}
+}
+
+// &Sweeper{} builds, and the panic would come out of a goroutine with nothing
+// to catch it.
+func TestSweepWithoutARestConfigFunctionDoesNotPanic(t *testing.T) {
+	s := &Sweeper{}
+	results := s.Run(context.Background(), testConfig("a"), nil)
+	if len(results) != 1 || results[0].Err == "" {
+		t.Fatalf("results = %+v, want a reported error", results)
+	}
+}
+
+// A tls.crt can lead with something that is not the leaf. Treating the first
+// block as the certificate drops an otherwise readable secret in silence.
+func TestCertNotAfterSkipsANonCertificateBlock(t *testing.T) {
+	leaf := time.Now().Add(48 * time.Hour).Truncate(time.Second)
+	preamble := []byte("-----BEGIN TRUSTED CERTIFICATE-----\nZ2FyYmFnZQ==\n-----END TRUSTED CERTIFICATE-----\n")
+
+	got, err := certNotAfter(append(preamble, certPEM(t, leaf)...))
+	if err != nil {
+		t.Fatalf("certNotAfter: %v", err)
+	}
+	if !got.Equal(leaf) {
+		t.Errorf("notAfter = %v, want the leaf's %v", got, leaf)
+	}
+}
+
+func TestCertNotAfterRejectsPEMWithNoCertificate(t *testing.T) {
+	key := []byte("-----BEGIN EC PRIVATE KEY-----\nZ2FyYmFnZQ==\n-----END EC PRIVATE KEY-----\n")
+	if _, err := certNotAfter(key); err == nil {
+		t.Error("a PEM carrying no certificate was accepted")
+	}
+}

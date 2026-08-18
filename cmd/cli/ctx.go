@@ -275,10 +275,7 @@ func printContextNames(a *app, cfg *clientcmdapi.Config) error {
 
 	pal := a.palette()
 	for _, name := range names {
-		line := name
-		if name == cfg.CurrentContext {
-			line = pal.Bold(name)
-		}
+		line := contextCell(pal, name, cfg.CurrentContext)
 		if _, err := fmt.Fprintln(a.out, line); err != nil {
 			return err
 		}

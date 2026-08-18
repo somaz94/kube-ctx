@@ -597,6 +597,18 @@ check_expiry() {
   assert_status 0 "a narrower window exits 0"
   assert_contains "Nothing expires within 3 days" "... and says so"
 
+  # --all shows everything but must not raise the alarm on its own, or any
+  # cluster holding one TLS secret would exit 2 and the gate would mean nothing.
+  capture kctx expiry "$LIVE" --days 3 --all
+  assert_status 0 "--all widens what is shown, not what counts as due"
+  assert_contains "e2e-cert" "... while still listing the certificate"
+
+  # A context that could not be read is not a clean bill of health. $PROD
+  # points at a deliberately offline server.
+  capture kctx expiry "$PROD" --days 1
+  assert_status 2 "an unreadable context exits 2 rather than reporting nothing"
+  assert_contains "unreadable" "... and is marked unreadable"
+
   kubectl --context "$LIVE" delete namespace kctx-expiry --wait=false >/dev/null 2>&1 || true
 }
 

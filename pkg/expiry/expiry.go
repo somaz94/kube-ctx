@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -73,7 +74,8 @@ type Item struct {
 	RenewalTime *time.Time `json:"renewalTime,omitempty"`
 }
 
-// In reports how long is left, rounded down to whole days.
+// In reports how long is left. Rounding into days is the caller's business,
+// since the report and the JSON want different precision.
 func (i Item) In(now time.Time) time.Duration { return i.NotAfter.Sub(now) }
 
 // Expired reports whether the deadline has already passed.
@@ -161,6 +163,14 @@ func (s *Sweeper) Run(ctx context.Context, cfg *clientcmdapi.Config, names []str
 func (s *Sweeper) sweepOne(ctx context.Context, name string, timeout time.Duration) Result {
 	result := Result{Context: name}
 
+	// Sweeper is exported, so &Sweeper{} builds. Every other field defaults
+	// itself in Run; this one cannot, and the panic would come out of a
+	// goroutine with nothing to catch it.
+	if s.RestConfig == nil {
+		result.Err = "sweeper has no RestConfig function"
+		return result
+	}
+
 	rc, err := s.RestConfig(name)
 	if err != nil {
 		result.Err = err.Error()
@@ -219,11 +229,26 @@ func Within(results []Result, now time.Time, days int) []Result {
 	return out
 }
 
-// Expiring reports whether anything at all is inside the window, which is what
-// decides the command's exit status.
+// Expiring reports whether anything at all is inside the window.
 func Expiring(results []Result) bool {
 	for _, r := range results {
 		if len(r.Items) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// Unknown reports whether any context failed to answer.
+//
+// It gates the exit status alongside Expiring, because the two together are
+// the only honest answer: a sweep that could not read a cluster has not
+// established that nothing is wrong there, and exiting 0 on it turns
+// "kctx expiry || notify-oncall" silent for the one case — every cluster
+// unreachable — where it most needs to fire.
+func Unknown(results []Result) bool {
+	for _, r := range results {
+		if r.Err != "" {
 			return true
 		}
 	}
@@ -236,13 +261,23 @@ func Expiring(results []Result) bool {
 // it, and those outlive the leaf, so taking the last or the maximum would
 // report a certificate as healthy for years after it stopped working.
 func certNotAfter(pemData []byte) (time.Time, error) {
-	block, _ := pem.Decode(pemData)
-	if block == nil {
-		return time.Time{}, fmt.Errorf("not valid PEM")
+	for rest := pemData; len(rest) > 0; {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		// The first CERTIFICATE block, not merely the first block: a tls.crt
+		// can lead with a text preamble or a TRUSTED CERTIFICATE, and treating
+		// that as the leaf drops an otherwise readable secret in silence.
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("unparseable certificate: %w", err)
+		}
+		return cert.NotAfter, nil
 	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("unparseable certificate: %w", err)
-	}
-	return cert.NotAfter, nil
+	return time.Time{}, errors.New("no certificate found")
 }

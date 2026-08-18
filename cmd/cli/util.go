@@ -182,6 +182,36 @@ func confirmPhrase(a *app, prompt, phrase string) (bool, error) {
 	return strings.TrimSpace(answer) == phrase, nil
 }
 
+// trimError shortens the errors client-go produces into something that fits a
+// table cell.
+//
+// The newline is cut first, and that is the load-bearing half: render measures
+// a cell's visible width over the whole string, so one embedded newline sets
+// its column to the width of the entire message and destroys the alignment of
+// every other row — the one property pkg/render exists to preserve. Trimming
+// runs rather than bytes keeps a multi-byte character from being cut in half.
+func trimError(msg string, max int) string {
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	runes := []rune(msg)
+	if len(runes) <= max || max < 1 {
+		return msg
+	}
+	return string(runes[:max-1]) + "…"
+}
+
+// contextCell renders a context name for a table, bolding the current one.
+//
+// Shared rather than inlined per command: five tables had their own copy, and
+// a sixth that forgot would silently stop marking where the user is.
+func contextCell(pal render.Palette, name, current string) string {
+	if name == current {
+		return pal.Bold(name)
+	}
+	return name
+}
+
 // readLine reads one line from the app's input stream.
 func readLine(a *app) (string, error) {
 	line, err := a.stdin().ReadString('\n')

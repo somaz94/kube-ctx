@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"k8s.io/client-go/rest"
 
@@ -131,8 +133,10 @@ func TestExpiryJSON(t *testing.T) {
 	}
 }
 
-// --all is the way to see the whole inventory, not just the urgent end.
-func TestExpiryAllIgnoresTheWindow(t *testing.T) {
+// --all is the way to see the whole inventory. It widens what is shown and
+// deliberately not what counts as due — otherwise any cluster holding a single
+// TLS secret would exit 2 and the gate would mean nothing.
+func TestExpiryAllShowsEverythingWithoutRaisingTheAlarm(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	now := fixedNow(t)
 	stubExpiry(t, map[string][]expiry.Item{
@@ -141,12 +145,33 @@ func TestExpiryAllIgnoresTheWindow(t *testing.T) {
 		},
 	}, nil)
 
-	err := h.run("expiry", "dev", "--all")
-	if code := ExitCode(err); code != ExitUnhealthy {
-		t.Fatalf("ExitCode = %d, want %d", code, ExitUnhealthy)
+	if err := h.run("expiry", "dev", "--all"); err != nil {
+		t.Fatalf("ExitCode = %d, want 0: nothing is due inside --days", ExitCode(err))
 	}
 	if !strings.Contains(h.stdout(), "far-off") {
-		t.Errorf("stdout = %q, want the far-off certificate", h.stdout())
+		t.Errorf("stdout = %q, want the far-off certificate listed", h.stdout())
+	}
+}
+
+// ... but something genuinely due still exits 2 with --all in play.
+func TestExpiryAllStillFlagsWhatIsDue(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindTLSSecret, Name: "far-off", NotAfter: now.AddDate(2, 0, 0)},
+			{Namespace: "ns", Kind: expiry.KindTLSSecret, Name: "due", NotAfter: now.AddDate(0, 0, 4)},
+		},
+	}, nil)
+
+	err := h.run("expiry", "dev", "--all")
+	if code := ExitCode(err); code != ExitUnhealthy {
+		t.Errorf("ExitCode = %d, want %d", code, ExitUnhealthy)
+	}
+	for _, name := range []string{"far-off", "due"} {
+		if !strings.Contains(h.stdout(), name) {
+			t.Errorf("stdout = %q, want %s listed", h.stdout(), name)
+		}
 	}
 }
 
@@ -169,5 +194,63 @@ func TestExpiryMarksManagedCertificates(t *testing.T) {
 	}
 	if strings.Contains(out, "manual") && strings.Count(out, "(auto)") != 1 {
 		t.Errorf("the unmanaged row was also marked auto: %q", out)
+	}
+}
+
+// The command's whole advertised use is "kctx expiry --days 30 || notify".
+// Exiting 0 because every cluster was unreachable is the failure mode that
+// gate exists to prevent.
+func TestExpiryExitsNonZeroWhenAContextCannotBeRead(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	fixedNow(t)
+
+	original := expiryFetch
+	expiryFetch = func(context.Context, *rest.Config) ([]expiry.Item, []string, error) {
+		return nil, nil, errors.New("connection refused")
+	}
+	t.Cleanup(func() { expiryFetch = original })
+
+	err := h.run("expiry", "dev")
+	if code := ExitCode(err); code != ExitUnhealthy {
+		t.Fatalf("ExitCode = %d, want %d; nothing was read, so nothing can be said", code, ExitUnhealthy)
+	}
+	if !strings.Contains(h.stdout(), "unreadable") {
+		t.Errorf("stdout = %q, want the context marked unreadable", h.stdout())
+	}
+}
+
+// A managed certificate whose renewal date has already passed is the most
+// urgent row on the page, not the quietest.
+func TestExpiryDoesNotDimAFailedRenewal(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	now := fixedNow(t)
+	overdue := now.AddDate(0, 0, -2)
+	stubExpiry(t, map[string][]expiry.Item{
+		"https://dev.example.com:6443": {
+			{Namespace: "ns", Kind: expiry.KindCertificate, Name: "stuck", NotAfter: now.AddDate(0, 0, 3),
+				Issuer: "letsencrypt", RenewalTime: &overdue},
+		},
+	}, nil)
+
+	_ = h.run("expiry", "dev")
+	if strings.Contains(h.stdout(), "(auto)") {
+		t.Errorf("a certificate cert-manager failed to renew was dimmed as automatic: %q", h.stdout())
+	}
+}
+
+// render measures a cell's width over the whole string, so an embedded newline
+// would set its column to the length of the entire client-go error.
+func TestTrimErrorCutsAtTheFirstNewline(t *testing.T) {
+	got := trimError("connection refused\nDid you mean something else?\nstack trace", 40)
+	if strings.Contains(got, "\n") {
+		t.Errorf("trimError kept a newline: %q", got)
+	}
+	if got != "connection refused" {
+		t.Errorf("trimError = %q", got)
+	}
+	// Runes, not bytes: cutting a multi-byte character in half emits invalid UTF-8.
+	long := strings.Repeat("한", 60)
+	if !utf8.ValidString(trimError(long, 10)) {
+		t.Error("trimError produced invalid UTF-8")
 	}
 }

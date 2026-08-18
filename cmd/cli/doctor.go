@@ -108,10 +108,7 @@ func renderDoctorTable(a *app, current string, results []probe.Result) error {
 	pal := a.palette()
 	rows := make([][]string, 0, len(results))
 	for _, r := range results {
-		name := r.Context
-		if r.Context == current {
-			name = pal.Bold(name)
-		}
+		name := contextCell(pal, r.Context, current)
 
 		status := pal.Green("ok")
 		switch {

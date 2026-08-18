@@ -3,11 +3,11 @@ package expiry
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -50,13 +50,17 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
 
 	items, err := tlsSecrets(ctx, clientset)
 	switch {
-	case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
+	case apierrors.IsForbidden(err):
 		// Partial beats silent, the same call pkg/namespaces makes when the
 		// cache is stale: a credential scoped to one namespace still tells the
 		// truth about that namespace, and a report that refuses to say
 		// anything because it cannot say everything gets ignored.
 		skipped = append(skipped, "secrets")
 	case err != nil:
+		// Unauthorized belongs here, not above. Forbidden means authenticated
+		// and scoped, so what was read is true; 401 means nothing authenticated
+		// and nothing was checked, and calling that a partial answer is how the
+		// report goes quiet at exactly the moment it stopped working.
 		return nil, nil, err
 	}
 
@@ -67,22 +71,19 @@ func Live(ctx context.Context, rc *rest.Config) ([]Item, []string, error) {
 
 	managed, err := certManagerOverlay(ctx, dynamicClient)
 	switch {
-	case apierrors.IsForbidden(err), apierrors.IsUnauthorized(err):
-		skipped = append(skipped, "certificates.cert-manager.io")
-	case apierrors.IsNotFound(err), meta(err):
+	case apierrors.IsNotFound(err), apimeta.IsNoMatchError(err):
 		// cert-manager is simply not installed. Not a gap in the answer — the
 		// secrets already carry every notAfter — so it is not reported as one.
 	case err != nil:
-		return nil, nil, err
+		// Every other overlay failure — forbidden, a webhook down, the
+		// aggregated API returning 503 — costs only the "who renews this"
+		// column. Returning the error instead would throw away every notAfter
+		// already read, so a certificate expiring tomorrow would vanish
+		// because cert-manager was unhealthy.
+		skipped = append(skipped, "certificates.cert-manager.io")
 	}
 
 	return merge(items, managed), skipped, nil
-}
-
-// meta reports whether the error is the API server saying it has never heard
-// of the resource, which is what a missing CRD looks like on a list.
-func meta(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "could not find the requested resource")
 }
 
 // tlsSecrets lists every kubernetes.io/tls secret and reads its leaf notAfter.
