@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased (2026-09-03)
+
+### Builds
+
+- **deps:** bump golangci/golangci-lint-action from 8 to 9 (#10) ([#10](https://github.com/somaz94/kube-ctx/pull/10)) ([91b1546](https://github.com/somaz94/kube-ctx/commit/91b1546f5a8248ce130f791ccb533adb15ab861e))
+- **deps:** bump the go-mod-minor group with 3 updates (#11) ([#11](https://github.com/somaz94/kube-ctx/pull/11)) ([b1a97c5](https://github.com/somaz94/kube-ctx/commit/b1a97c561d10d16e0f9852d56cd752601c10315c))
+
+### Continuous Integration
+
+- retry mirror pushes on transient remote failures ([d28d0f1](https://github.com/somaz94/kube-ctx/commit/d28d0f1cdd9ee40cf3221cbdc6d97bb38e2eff07))
+- drop the dead issue-close trigger from changelog generation ([a3f2961](https://github.com/somaz94/kube-ctx/commit/a3f2961c8963ba025864a5eed9ba573af3b6378a))
+
+### Contributors
+
+- somaz
+
+<br/>
+
 ## [v0.7.1](https://github.com/somaz94/kube-ctx/compare/v0.7.0...v0.7.1) (2026-08-18)
 
 ### Bug Fixes
