@@ -157,8 +157,6 @@ func TestExpiryMarksAnOverdueRenewal(t *testing.T) {
 	if !strings.Contains(out, "(auto, overdue)") {
 		t.Errorf("stdout = %q, want the failed renewal called out", out)
 	}
-	// And not dimmed as an ordinary managed row. Asserted on the whole cell so
-	// it does not pass merely because "(auto)" is a prefix of "(auto, overdue)".
 	if strings.Contains(out, "3d (auto)") {
 		t.Errorf("a failed renewal was dimmed as automatic: %q", out)
 	}
@@ -322,15 +320,13 @@ func TestExpiryExitsNonZeroWhenAContextCannotBeRead(t *testing.T) {
 	}
 }
 
-// render measures a cell's width over the whole string, so an embedded newline
-// would set its column to the length of the entire client-go error.
 // A negative window would report only what has already expired, which reads as
 // a clean sweep on a cluster whose certificate expires tomorrow.
 func TestExpiryRejectsANegativeWindow(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
-	// Spelled "--days=-1": normalizeArgs rewrites a bare "-1" into the history
-	// shorthand before cobra sees it, wherever it sits.
+	// Spelled "--days=-1": normalizeArgs would rewrite a bare "-1" into the
+	// history shorthand before cobra sees it.
 	err := h.run("expiry", "--days=-1")
 	if err == nil {
 		t.Fatal("a negative window was accepted")
@@ -353,6 +349,8 @@ func TestExpiryEmptyKubeconfig(t *testing.T) {
 	}
 }
 
+// render measures a cell's width over the whole string, so an embedded newline
+// would set its column to the length of the entire client-go error.
 func TestTrimErrorCutsAtTheFirstNewline(t *testing.T) {
 	got := trimError("connection refused\nDid you mean something else?\nstack trace", 40)
 	if strings.Contains(got, "\n") {

@@ -191,8 +191,7 @@ setup() {
   mkdir -p "$WORK/bin" "$WORK/config" "$WORK/cache" "$WORK/state"
 
   # The hook defines a shell function named after the binary and calls it
-  # through PATH, so the binary has to be reachable as "kctx" — not as
-  # ./bin/kctx. This also makes os.Executable() resolve to the right name.
+  # through PATH, so the binary has to be reachable as "kctx" — not ./bin/kctx.
   ln -s "$KCTX_BIN" "$WORK/bin/kctx"
   PATH="$WORK/bin:$PATH"
   export PATH
@@ -418,7 +417,7 @@ check_hook() {
     assert_contains "depth=1" "$sh: the hook exports KUBE_CTX_DEPTH"
     # The one that matters. When the exports are written in the wrong shell's
     # syntax, sourcing them fails, $KUBECONFIG keeps pointing at the global
-    # file, and the command still reports a successful switch — the v0.1.0 bug.
+    # file, and the command still reports a successful switch — fixed in v0.1.0.
     assert_contains "/kube-ctx/shells/" "$sh: KUBECONFIG is repointed at a session copy"
     assert_contains "context=$STAGING" "$sh: kubectl inside the shell sees the new context"
     assert_eq "$LIVE" "$(current_context)" "$sh: the global kubeconfig is untouched"
@@ -570,7 +569,7 @@ check_expiry() {
     return 0
   fi
 
-  # 10 days out: inside the default 30-day window, outside the 7-day one, so
+  # 10 days out: inside the default 30-day window, outside the 3-day one, so
   # both the "found it" and the "--days narrows it" assertions are meaningful.
   openssl req -x509 -newkey rsa:2048 -nodes -days 10 \
     -subj "/CN=expiry.e2e.example.com" \
@@ -657,10 +656,6 @@ check_guard() {
   check_namespace_guard
 }
 
-# The second guard axis. Worth a real cluster rather than a unit test: the
-# namespaces here are the ones a live API server actually reports, and the
-# assertion that matters most is a negative one — that a rule about kube-system
-# leaves the switch into the cluster alone.
 check_namespace_guard() {
   section "Namespace guards, on every route to a namespace"
 
