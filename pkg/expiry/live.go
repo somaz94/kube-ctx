@@ -16,11 +16,9 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-// certManagerCertificates is the CRD that says what renews a certificate.
-//
-// Read through the dynamic client rather than cert-manager's typed API: this
-// is two string fields off an unstructured object, and taking the dependency
-// would pull cert-manager's whole scheme in to avoid one type assertion.
+// certManagerCertificates is the CRD that says what renews a certificate. Read
+// through the dynamic client: a few string fields do not justify importing
+// cert-manager's whole scheme.
 var certManagerCertificates = schema.GroupVersionResource{
 	Group:    "cert-manager.io",
 	Version:  "v1",
@@ -81,10 +79,8 @@ func classifySecrets(err error) (Skip, bool, error) {
 	case err == nil:
 		return Skip{}, false, nil
 	case apierrors.IsForbidden(err):
-		// Blind, not partial. The list is cluster-wide and issued once, so a
-		// refusal reads zero certificates rather than some of them — there is
-		// no namespaced fallback to fall back to. Recorded rather than
-		// returned only so the row still names the context and says why.
+		// Blind, not partial: the list is cluster-wide and issued once, so a
+		// refusal reads zero certificates, and there is no namespaced fallback.
 		return Skip{Resource: "secrets", Reason: err.Error(), Blind: true}, true, nil
 	default:
 		// Unauthorized lands here. Forbidden means authenticated and scoped;

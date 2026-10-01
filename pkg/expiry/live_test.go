@@ -199,9 +199,8 @@ func TestLiveReportsAnUnreachableCluster(t *testing.T) {
 	}
 }
 
-// 401 is not a partial answer. Forbidden means authenticated and scoped, so
-// what was read is true; unauthorized means nothing was checked, and calling
-// that a gap is how the report goes quiet when it stops working.
+// tlsSecrets wraps its list error, and a 401 must still read as unauthorized
+// through the wrap: classifySecrets fails on it rather than recording a skip.
 func TestLiveTreatsUnauthorizedAsAFailureNotAGap(t *testing.T) {
 	client := fake.NewSimpleClientset()
 	client.PrependReactor("list", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
@@ -212,8 +211,6 @@ func TestLiveTreatsUnauthorizedAsAFailureNotAGap(t *testing.T) {
 	if !apierrors.IsUnauthorized(err) {
 		t.Fatalf("err = %v, want an unauthorized error to reach the caller", err)
 	}
-	// The classification Live makes on it: forbidden is recorded as a blind
-	// skip, 401 is not tolerated at all.
 	if apierrors.IsForbidden(err) {
 		t.Error("unauthorized was classified as forbidden")
 	}
@@ -233,10 +230,10 @@ func TestLiveKeepsSecretsWhenTheOverlayFails(t *testing.T) {
 	}
 }
 
-// The gate is Live's Forbidden branch, not a constant. Asserting through
-// Unknown rather than on the record's contents is the whole point: a change
-// that carries the reason along, or renames the resource, must not be able to
-// take the exit status with it in silence.
+// The gate is classifySecrets' Forbidden branch. Asserting through Unknown
+// rather than on the record's contents is the whole point: a change that
+// carries the reason along, or renames the resource, must not be able to take
+// the exit status with it in silence.
 func TestARefusedSecretsListReachesTheExitStatus(t *testing.T) {
 	forbidden := apierrors.NewForbidden(
 		schema.GroupResource{Resource: "secrets"}, "", errors.New("no"))

@@ -308,8 +308,8 @@ func TestListWithoutASessionDirectory(t *testing.T) {
 	}
 }
 
-// Nothing rewrites a session copy except a context switch, so without this a
-// terminal open longer than the sweep window loses its kubeconfig mid-use.
+// A session copy is rewritten only by a context or namespace switch, so without
+// Touch a terminal open past the sweep window loses its kubeconfig mid-use.
 func TestTouchKeepsALiveSessionFromBeingSwept(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	cfg := testutil.Config(testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})

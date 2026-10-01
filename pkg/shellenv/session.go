@@ -94,8 +94,8 @@ func New(cfg *clientcmdapi.Config, ctxName string) (*Session, error) {
 	}
 	path := filepath.Join(dir, id+".yaml")
 
-	// Create the file with owner-only permissions before clientcmd writes to
-	// it, so the credentials are never briefly world-readable.
+	// O_EXCL makes an existing path (a colliding ID, a planted symlink) fail here
+	// rather than be truncated or followed by clientcmd.WriteToFile.
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
 	if err != nil {
 		return nil, fmt.Errorf("create session kubeconfig: %w", err)
@@ -111,7 +111,7 @@ func New(cfg *clientcmdapi.Config, ctxName string) (*Session, error) {
 	return &Session{ID: id, Path: path, Context: ctxName}, nil
 }
 
-// Remove deletes the session kubeconfig and its history file.
+// Remove deletes the session kubeconfig and its context and namespace history.
 func (s *Session) Remove() error {
 	if err := os.Remove(s.Path); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove session kubeconfig: %w", err)
@@ -212,10 +212,10 @@ func List() ([]Info, error) {
 // Touch records that the current session is still in use.
 //
 // It is what makes an age-based sweep safe. Nothing rewrites a session copy
-// except a context switch, so a terminal left open for longer than the sweep
-// window without switching would have its kubeconfig deleted out from under it
-// — every later kubectl in that shell failing on a file that is no longer
-// there. Running kube-ctx at all is proof the shell is alive.
+// except a context or namespace switch, so a terminal left open for longer than
+// the sweep window without switching would have its kubeconfig deleted out from
+// under it — every later kubectl in that shell failing on a file that is no
+// longer there. Running kube-ctx at all is proof the shell is alive.
 func Touch() error {
 	if !Active() {
 		return nil

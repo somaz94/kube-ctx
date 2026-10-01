@@ -66,7 +66,7 @@ type ListFunc func(ctx context.Context) ([]string, error)
 type Result struct {
 	Namespaces []string
 	Source     Source
-	// Err is the live-call failure that forced a fall back to a stale cache.
+	// Err is the live-call failure; Namespaces is nil unless a stale cache stood in.
 	Err error
 }
 

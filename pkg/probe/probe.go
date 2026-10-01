@@ -54,9 +54,9 @@ type Result struct {
 	Cluster string `json:"cluster"`
 	Server  string `json:"server"`
 
-	// Auth describes the credential type, e.g. "exec: aws".
+	// Auth is the credential type, e.g. "exec".
 	Auth AuthKind `json:"auth"`
-	// AuthDetail names the exec plugin, when there is one.
+	// AuthDetail qualifies Auth, e.g. the exec command or the cert file path.
 	AuthDetail string `json:"authDetail,omitempty"`
 	// Expiry is when the credential stops working, when that is knowable
 	// without contacting the cluster.
@@ -303,8 +303,8 @@ func certExpiry(pemData []byte) (*time.Time, error) {
 //
 // The token is decoded, not verified: kube-ctx has no business validating a
 // signature it cannot check, and an unverifiable exp is still the right thing
-// to warn about. A non-JWT token (a service account secret, say) simply has no
-// discoverable expiry.
+// to warn about. A non-JWT token, or a JWT with no exp claim (a legacy service
+// account token, say), has no discoverable expiry.
 func tokenExpiry(token string) *time.Time {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {

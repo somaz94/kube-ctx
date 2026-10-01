@@ -44,9 +44,9 @@ const DefaultTimeout = 15 * time.Second
 // DefaultDays is the window that counts as "about to expire".
 //
 // Thirty days is the shortest notice that is still actionable: it clears a
-// month of change freezes, and it is longer than the 15 days before notAfter
-// at which cert-manager renews by default, so a healthy managed certificate
-// shows up here having already scheduled its own fix rather than as a surprise.
+// month of change freezes, and it is no shorter than cert-manager's default
+// renewal lead (a third of the lifetime: 30 days for a 90-day certificate), so
+// a healthy managed certificate shows up here having already scheduled its fix.
 const DefaultDays = 30
 
 // Kind is what sort of thing is expiring.
@@ -292,11 +292,9 @@ func Unknown(results []Result) bool {
 	return false
 }
 
-// certNotAfter reads notAfter out of a PEM certificate chain.
-//
-// The leaf is the first block: a tls.crt commonly carries intermediates after
-// it, and those outlive the leaf, so taking the last or the maximum would
-// report a certificate as healthy for years after it stopped working.
+// certNotAfter reads the leaf's notAfter: the first CERTIFICATE block. A
+// tls.crt commonly carries longer-lived intermediates after it, so taking the
+// last or the maximum would call a dead certificate healthy for years.
 func certNotAfter(pemData []byte) (time.Time, error) {
 	// Named remaining, not rest: k8s.io/client-go/rest is imported here, and a
 	// loop variable shadowing it compiles until the first edit that needs the
@@ -308,8 +306,8 @@ func certNotAfter(pemData []byte) (time.Time, error) {
 			break
 		}
 		// The first CERTIFICATE block, not merely the first block: a tls.crt
-		// can lead with a text preamble or a TRUSTED CERTIFICATE, and treating
-		// that as the leaf drops an otherwise readable secret in silence.
+		// can lead with a TRUSTED CERTIFICATE, and treating that as the leaf
+		// drops an otherwise readable secret in silence.
 		if block.Type != "CERTIFICATE" {
 			continue
 		}

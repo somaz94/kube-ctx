@@ -1,6 +1,6 @@
 // Package config reads and writes kube-ctx's own configuration file, which
-// holds context aliases and the guard rules that classify a context as
-// production.
+// holds context aliases, directory bindings, and the guard rules that classify
+// a context, or a namespace inside one, as production.
 //
 // The file is optional. A missing or empty config yields built-in defaults, so
 // kube-ctx works on a fresh machine with nothing set up.
@@ -74,13 +74,13 @@ const (
 	LevelDanger Level = "danger"
 )
 
-// Guard classifies contexts by name.
+// Guard classifies contexts by name, or the namespaces inside them.
 //
-// A rule carries exactly one matcher. Match is the general one; Contexts,
-// Prefix and Suffix exist because the names that most need guarding are the
-// ones a regex over "prod" never catches — the cluster called cluster-7 that
-// happens to run the business — and demanding a regex to name it is a barrier
-// in front of the safety feature.
+// A rule carries exactly one matcher; a namespace rule may omit it. Match is
+// the general one; Contexts, Prefix and Suffix exist because the names that
+// most need guarding are the ones a regex over "prod" never catches — the
+// cluster called cluster-7 that happens to run the business — and demanding a
+// regex to name it is a barrier in front of the safety feature.
 type Guard struct {
 	// Match is a regular expression tested against the context name.
 	Match string `yaml:"match,omitempty" json:"match,omitempty"`
@@ -107,9 +107,9 @@ type Guard struct {
 	Namespaces []string `yaml:"namespaces,omitempty" json:"namespaces,omitempty"`
 	// Level is safe, warn, or danger.
 	Level Level `yaml:"level" json:"level"`
-	// Confirm requires the user to retype the context name before switching.
+	// Confirm requires retyping the guarded name before going there.
 	Confirm bool `yaml:"confirm" json:"confirm"`
-	// Label overrides the badge text shown next to a matching context.
+	// Label overrides the badge text shown next to a matching context or namespace.
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
 }
 

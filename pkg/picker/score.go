@@ -12,12 +12,8 @@ import (
 	"unicode"
 )
 
-// Scoring weights, shaped after fzf's: a match is worth a lot, matches that
-// start a word or continue a run are worth more, and skipped characters cost
-// enough that a tight match beats one scattered across separators.
-//
-// The relative sizes are what matter. gapStart deliberately exceeds
-// bonusBoundary, or "p-r-o" would outrank "prod" for the query "pro" by
+// Scoring weights, shaped after fzf's. gapStart + bonusConsecutive must exceed
+// bonusBoundary, or "p-r-o" would tie or beat "prod" for the query "pro" by
 // collecting a word-start bonus at every hyphen.
 const (
 	scoreMatch = 16
@@ -155,8 +151,8 @@ func charBonus(target []rune, j int) int {
 // first.
 //
 // Equal scores are broken by length — the shorter name contains less noise
-// around the match — and then by input order, so an empty query leaves the
-// list exactly as it came in.
+// around the match — and then by input order. An empty query is not ranked at
+// all, so the list stays exactly as it came in.
 func Filter(query string, candidates []string) []Match {
 	matches := make([]Match, 0, len(candidates))
 	for i, candidate := range candidates {

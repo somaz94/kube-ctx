@@ -1,8 +1,8 @@
 // Package guard classifies contexts by how much damage a mistake would do.
 //
-// The rules are regular expressions over the context name, because that is the
-// only thing every cluster has in common — an EKS ARN, a kind cluster and a
-// kubeadm context share no label, annotation or field that says "production".
+// The rules match the context name, because that is the only thing every
+// cluster has in common — an EKS ARN, a kind cluster and a kubeadm context
+// share no label, annotation or field that says "production".
 //
 // A rule that lists namespaces classifies those instead, inside the contexts
 // it matches. The two axes are kept as separate lists rather than one, so that
@@ -19,13 +19,13 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/config"
 )
 
-// Verdict is the classification of one context.
+// Verdict is the classification of one context, or of a namespace inside one.
 type Verdict struct {
 	// Level is safe, warn, or danger.
 	Level config.Level
-	// Confirm reports whether switching requires retyping the context name.
+	// Confirm reports whether going there requires retyping the guarded name.
 	Confirm bool
-	// Label is the short badge to show next to the context.
+	// Label is the short badge to show next to the context or namespace.
 	Label string
 	// Rule is the pattern that matched, so the user can see why.
 	Rule string
@@ -104,10 +104,9 @@ func compileRule(g config.Guard) (rule, error) {
 	if g.ScopesNamespaces() {
 		r.namespaces = make(map[string]struct{}, len(g.Namespaces))
 		for _, ns := range g.Namespaces {
-			// Trimmed, not just checked: "-n 'kube-system, istio-system'"
-			// reaches here with the space still attached, since pflag splits
-			// the CSV without trimming. Keyed raw, that rule would look
-			// accepted and never match — a safety feature failing open.
+			// Trimmed, not just checked: the CLI trims in trimAll, but a
+			// hand-edited " istio-system" in config.yaml would otherwise look
+			// accepted and never match — a guard failing open.
 			ns = strings.TrimSpace(ns)
 			if ns == "" {
 				return rule{}, errors.New("lists an empty namespace; remove it or name the namespace")
@@ -203,7 +202,7 @@ func normalizeLevel(level config.Level) config.Level {
 	}
 }
 
-// labelFor picks the badge text: the rule's own label, else the level name.
+// labelFor picks the badge: the rule's own label, else DANGER, WARN or none.
 func labelFor(g config.Guard) string {
 	if g.Label != "" {
 		return g.Label

@@ -166,7 +166,7 @@ func (m *Model) Visible() []Match {
 	return m.matches[m.offset:end]
 }
 
-// trimLastWord removes the trailing word and any whitespace before it.
+// trimLastWord removes the last word and any whitespace after it.
 func trimLastWord(s string) string {
 	s = strings.TrimRight(s, " ")
 	if i := strings.LastIndex(s, " "); i >= 0 {

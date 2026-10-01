@@ -80,8 +80,8 @@ type saveOptions struct {
 }
 
 // WithBackup snapshots every kubeconfig file before the write. Reserved for
-// destructive edits (rename, delete) — a plain context or namespace switch is
-// frequent and trivially reversible, so it does not pay the copy.
+// destructive edits (rename, delete, import) — a plain context or namespace
+// switch is frequent and trivially reversible, so it does not pay the copy.
 func WithBackup() SaveOption {
 	return func(o *saveOptions) { o.backup = true }
 }

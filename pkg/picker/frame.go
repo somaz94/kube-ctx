@@ -8,9 +8,8 @@ import (
 )
 
 // frame renders the current state and reports how many lines it occupies.
-//
-// Every line is terminated with an erase-to-end-of-line so a shorter frame
-// never leaves characters from the previous, longer one behind.
+// Each line is erased whole before it is written, so a shorter frame never
+// leaves characters from the previous, longer one behind.
 func (p *Picker) frame(m *Model) (string, int) {
 	pal := p.Palette
 	var b strings.Builder
@@ -71,7 +70,7 @@ func (p *Picker) itemLine(m *Model, match Match, selected bool) string {
 	return strings.Join(parts, "  ")
 }
 
-// highlight underlines the query characters inside the label.
+// highlight colors the query characters inside the label.
 func highlight(pal render.Palette, label string, positions []int) string {
 	if len(positions) == 0 || !pal.Enabled() {
 		return label

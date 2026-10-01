@@ -103,9 +103,8 @@ func DecodeKey(buf []byte) (Key, int) {
 // ESC meaning "abort".
 func decodeEscape(buf []byte) (Key, int) {
 	if len(buf) == 1 {
-		// A lone ESC byte is ambiguous until more input arrives. The caller
-		// resolves it by reading again; on a real key press the rest of the
-		// sequence is already in the same read.
+		// A lone ESC aborts instead of waiting for more input: an arrow key's bytes
+		// normally arrive in one read, so an ESC on its own is the Escape key.
 		return Key{Type: KeyEscape}, 1
 	}
 	if buf[1] != keyBracket {

@@ -297,8 +297,8 @@ func TestSaveIntoUnwritableLocation(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	// clientcmd writes through a temporary file in the same directory, so a
-	// read-only directory is what actually blocks the write.
+	// ModifyConfig creates "<file>.lock" beside each kubeconfig before writing,
+	// so a read-only directory is what actually blocks the write.
 	dir := filepath.Dir(files[0])
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatalf("chmod: %v", err)
@@ -436,7 +436,6 @@ func TestWriteFileRefusesToClobber(t *testing.T) {
 		t.Errorf("contents = %q, want the replacement", data)
 	}
 
-	// A path whose directory does not exist is the other way this fails.
 	if err := WriteFile(filepath.Join(path, "nested"), []byte("x"), false); err == nil {
 		t.Error("writing under a non-directory must fail")
 	}

@@ -62,7 +62,7 @@ func TestFetchFallsBackToStaleCache(t *testing.T) {
 	dir := t.TempDir()
 	Fetch(context.Background(), "dev", staticList("default"), Options{CacheDir: dir})
 
-	// A zero TTL makes the entry written above stale immediately.
+	// 1ns, not 0: Fetch reads a zero TTL as DefaultTTL and would serve the cache.
 	boom := errors.New("dial tcp: i/o timeout")
 	got := Fetch(context.Background(), "dev", failingList(boom), Options{CacheDir: dir, TTL: time.Nanosecond})
 

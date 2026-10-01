@@ -12,8 +12,7 @@ import (
 	"golang.org/x/term"
 )
 
-// ANSI SGR sequences. Kept as constants rather than pulled from a color library
-// so the dependency list stays at cobra + client-go + x/term.
+// ANSI SGR sequences, kept as constants so color needs no library dependency.
 const (
 	ansiReset  = "\033[0m"
 	ansiBold   = "\033[1m"
@@ -48,8 +47,8 @@ func New(w io.Writer, forceNoColor bool) Palette {
 	return Palette{enabled: IsTerminal(w)}
 }
 
-// NewEnabled returns a palette with color forced on, for tests and for callers
-// that already decided.
+// NewEnabled returns a palette with color forced on or off, for tests and for
+// callers that already decided.
 func NewEnabled(enabled bool) Palette { return Palette{enabled: enabled} }
 
 // Enabled reports whether this palette emits escape sequences.

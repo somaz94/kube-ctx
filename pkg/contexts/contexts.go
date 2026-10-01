@@ -1,10 +1,10 @@
 // Package contexts implements the read and edit operations kube-ctx performs
 // on the contexts of a merged kubeconfig.
 //
-// Every function here takes an already-loaded *api.Config and mutates it in
-// memory only. Persisting is the caller's job (pkg/kubeconfig), which keeps
-// these operations trivially testable and keeps the "when do we write" decision
-// in one place.
+// Every kubeconfig operation here takes an already-loaded *api.Config and
+// mutates it in memory only. Persisting is the caller's job (pkg/kubeconfig),
+// which keeps these operations trivially testable and keeps the "when do we
+// write" decision in one place. History is the exception: it owns its file.
 package contexts
 
 import (

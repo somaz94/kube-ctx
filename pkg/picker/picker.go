@@ -19,8 +19,8 @@ var ErrAborted = errors.New("selection aborted")
 // signal for callers to fall back to plain listing.
 var ErrNoTTY = errors.New("no interactive terminal available")
 
-// defaultHeight is how many rows the picker shows when the terminal height is
-// unknown.
+// defaultHeight caps the rows NewTTY shows (a short terminal gets fewer) and
+// is Run's fallback when Height is unset.
 const defaultHeight = 10
 
 // readChunk is the read buffer size. One keystroke is at most a few bytes, but
@@ -30,7 +30,7 @@ const readChunk = 64
 // Picker runs an interactive selection over a terminal.
 //
 // It is deliberately constructed from plain io.Reader/io.Writer plus an
-// optional raw-mode hook, so tests drive a full session with a bytes.Reader
+// optional raw-mode hook, so tests drive a full session with a strings.Reader
 // and a buffer.
 type Picker struct {
 	// In supplies keystrokes.
@@ -110,8 +110,6 @@ func (p *Picker) Run(items []Item) (int, error) {
 
 	model := NewModel(items, height)
 	drawn := 0
-	// pending holds bytes of an escape sequence that arrived split across
-	// reads, so the next read can complete it.
 	var pending []byte
 
 	for {
@@ -145,8 +143,8 @@ func (p *Picker) Run(items []Item) (int, error) {
 }
 
 // readKeys blocks for one read and applies every complete keystroke in it.
-// Bytes left over from an incomplete escape sequence are returned so the next
-// read can finish them.
+// Bytes left over from an incomplete escape sequence or UTF-8 rune are
+// returned so the next read can finish them.
 func (p *Picker) readKeys(model *Model, pending []byte) ([]byte, error) {
 	buf := make([]byte, readChunk)
 	n, err := p.In.Read(buf)

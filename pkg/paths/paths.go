@@ -3,8 +3,8 @@
 //
 // The XDG base directory variables win when set; otherwise the conventional
 // ~/.config, ~/.cache and ~/.local/state fallbacks are used. Keeping this in
-// one place means tests can redirect every kube-ctx write with two t.Setenv
-// calls instead of stubbing each caller.
+// one place means tests can redirect every kube-ctx write by setting the XDG
+// variables instead of stubbing each caller.
 package paths
 
 import (
