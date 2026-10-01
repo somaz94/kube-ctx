@@ -66,9 +66,8 @@ func runCtx(a *app, args []string, back int) error {
 	return switchContext(a, cfg, target)
 }
 
-// resolveContextArg turns the command line into a context name. It returns an
-// empty string when the user gave no target and one must be picked
-// interactively.
+// resolveContextArg turns the command line into a context name, opening the
+// picker when no target was given.
 func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int) (string, error) {
 	if back = historyRef(args, back); back > 0 {
 		history, err := contexts.NewHistory(historyScope())
@@ -145,13 +144,9 @@ func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
 	return a.loader().Save(cfg)
 }
 
-// requireGuardConfirmation runs the guard prompt, if the rule asks for one,
-// before anything is allowed to reach the context.
-//
-// Every route to a cluster goes through here — switching, opening a subshell,
-// and running a single command. A guard that only covered "kctx ctx" would be
-// bypassed by "kctx exec prod -- kubectl delete ...", which is the more
-// dangerous of the two.
+// requireGuardConfirmation runs the guard prompt, if the rule asks for one.
+// Every route to a cluster must call it: a guard covering only "kctx ctx" is
+// bypassed by "kctx exec prod -- kubectl delete ...".
 func requireGuardConfirmation(a *app, target string) error {
 	ok, err := confirmGuard(a, target)
 	return enforceGuard(a, ok, err)
@@ -295,10 +290,8 @@ func completeContexts(a *app) func(*cobra.Command, []string, string) ([]string, 
 }
 
 // completeContextList completes every positional argument, minus the ones
-// already typed.
-//
-// "delete", "doctor" and "guard add" all take a list; wiring them to the
-// single-argument version meant the second name onwards completed nothing.
+// already typed, for the commands that take a list: the single-argument
+// version left the second name onwards with nothing to complete.
 func completeContextList(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return contextCandidates(a, args)

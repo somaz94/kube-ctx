@@ -10,7 +10,7 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/guard"
 )
 
-// newGuardCmd manages the rules that classify contexts.
+// newGuardCmd manages the rules that classify contexts and namespaces.
 func newGuardCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "guard",
@@ -42,7 +42,7 @@ func newGuardListCmd(a *app) *cobra.Command {
 	}
 }
 
-// newGuardAddCmd appends a rule.
+// newGuardAddCmd prepends a rule.
 func newGuardAddCmd(a *app) *cobra.Command {
 	var (
 		level      string

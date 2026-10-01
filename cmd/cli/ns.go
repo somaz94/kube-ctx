@@ -204,10 +204,8 @@ func nsHistory(ctxName string) (*contexts.History, error) {
 	return contexts.NewHistory(scope)
 }
 
-// registerNamespaceFlagCompletion wires -n to the namespace list.
-//
-// Best-effort: a completion that cannot be registered is not worth failing a
-// command over, and cobra only errors here when the flag does not exist.
+// registerNamespaceFlagCompletion wires -n to the namespace list. Best-effort:
+// a completion that fails to register is not worth failing a command over.
 func registerNamespaceFlagCompletion(a *app, cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc("namespace", completeNamespaces(a))
 }

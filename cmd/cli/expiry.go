@@ -135,18 +135,10 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 		return err
 	}
 
-	// Two ways to be non-zero, and both have to be: something is due, or a
-	// cluster could not be read at all. A sweep that reached nothing has not
-	// established that nothing is wrong there, and "kctx expiry || notify"
-	// going quiet when every cluster is unreachable is the failure mode this
-	// command exists to prevent.
-	// Unknown reads the unfiltered results on purpose: it is a statement about
-	// what could be read, not about the window. Keyed to the display slice, a
-	// later display-side filter would silently take the cron gate with it.
+	// Unknown reads the unfiltered results, like the warning above: keyed to the
+	// display slice, a later display-side filter would take the cron gate with it.
 	if expiry.Expiring(due) || expiry.Unknown(results) {
-		// The same separation doctor makes: 2 is "the clusters answered and
-		// something needs doing", distinct from 1, which is kube-ctx failing
-		// to run at all. Silent, because the table already said what.
+		// Silent: the table already said what.
 		return &exitError{code: ExitUnhealthy}
 	}
 	return nil

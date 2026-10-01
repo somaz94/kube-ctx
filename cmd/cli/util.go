@@ -19,12 +19,8 @@ func renderTable(a *app, headers []string, rows [][]string) error {
 	return render.Table(a.out, headers, rows)
 }
 
-// renderOutput prints payload as JSON when -o json was asked for, and the
-// table otherwise.
-//
-// Commands go through here rather than testing jsonOutput() themselves so that
-// adding a command cannot quietly leave -o json unimplemented — which is how
-// alias and guard came to accept the flag and ignore it.
+// renderOutput prints payload as JSON under -o json and the table otherwise,
+// so a table routed through here cannot accept -o json and ignore it.
 func renderOutput(a *app, headers []string, rows [][]string, payload any) error {
 	if a.jsonOutput() {
 		return writeJSON(a, payload)
@@ -111,10 +107,8 @@ func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), d)
 }
 
-// dedupe removes repeats, keeping the first occurrence and the original order.
-//
-// Both commands that take a list of contexts want this: naming one twice is a
-// typo, not a request to export it twice or run the command against it twice.
+// dedupe removes repeats, keeping the first occurrence and the original order:
+// naming a context twice is a typo, not a request to act on it twice.
 func dedupe(names []string) []string {
 	seen := make(map[string]bool, len(names))
 	out := make([]string, 0, len(names))

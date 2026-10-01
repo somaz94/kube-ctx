@@ -8,14 +8,8 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/contexts"
 )
 
-// newCurrentCmd prints where you are without changing it.
-//
-// This is what every prompt integration shells out to — powerlevel10k, starship
-// custom segments, tmux status lines — and it is the reason a kubectx user
-// reaches for "kubectx -c" on day one. kube-ctx has a better answer than
-// "kubectl config current-context": inside a managed shell that command reads
-// the session copy only if $KUBECONFIG is honored, whereas this always reports
-// the context this terminal is actually on.
+// newCurrentCmd prints the current context without changing it, for shell
+// prompts and status lines (the "kubectx -c" equivalent).
 func newCurrentCmd(a *app) *cobra.Command {
 	var namespace bool
 

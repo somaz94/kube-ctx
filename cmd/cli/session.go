@@ -9,9 +9,7 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
-// Environment variables kube-ctx sets for shells it manages. They are
-// re-exported here so the command layer does not have to reach into shellenv
-// for a name it only prints.
+// Environment variables kube-ctx sets for the shells it manages.
 const (
 	// EnvShellID identifies one kube-ctx-managed shell session.
 	EnvShellID = shellenv.EnvShellID
@@ -64,13 +62,9 @@ func startShellSession(a *app, cfg *clientcmdapi.Config, target string) (bool, e
 	// Best-effort: never fail the switch the user asked for.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
-	// The hook sources this file in the calling shell, which is the only way a
-	// child process can change its parent's environment.
-	//
-	// The hook says which shell it is; $SHELL is only a fallback, because it
-	// names the login shell rather than the one that is about to source this.
-	// Getting it wrong is silent: bash sourcing "set -gx" reports success and
-	// changes nothing.
+	// The hook names its own shell; $SHELL is only a fallback because it is the
+	// login shell. Wrong syntax loses a switch kctx already reported: bash
+	// rejects fish's "set -gx", and the hook still returns kctx's own status.
 	sh, err := shellenv.ParseShell(os.Getenv(shellenv.EnvShell), os.Getenv("SHELL"))
 	if err != nil {
 		sh = shellenv.Bash

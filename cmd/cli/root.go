@@ -50,13 +50,9 @@ type app struct {
 	// rather than restarting from a drained reader.
 	prompts *bufio.Reader
 
-	// compiled memoizes the guard rules for the life of one command.
-	//
-	// Building them reads and parses the config file and compiles every
-	// pattern, and the callers are per-item rather than per-command: a
-	// fan-out over 40 contexts asks twice per target to answer the guards and
-	// once more per result to badge the output. Nothing writes the config and
-	// then classifies within the same command, so one compile is enough.
+	// compiled memoizes the guard rules for one command: callers classify per
+	// item (a fan-out asks per target and again per result), and no command
+	// writes guard rules and then classifies.
 	compiled *guard.Classifier
 }
 
@@ -206,8 +202,7 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 	return root
 }
 
-// historyArgPattern matches the "-2" style shorthand for walking back through
-// context history.
+// historyArgPattern matches the "-N" history shorthand.
 var historyArgPattern = regexp.MustCompile(`^-([0-9]+)$`)
 
 // normalizeArgs rewrites "-N" into "--back=N", up to the argument terminator.
@@ -238,17 +233,17 @@ func normalizeArgs(args []string) []string {
 
 // Exit statuses kube-ctx produces on its own behalf.
 //
-// They are distinct because the interesting uses of this tool are in shell
-// one-liners: "kctx ctx prod && deploy" must not deploy when the guard was
-// declined, and "kctx doctor prod || page" must not page because --kubeconfig
-// was misspelled.
+// Any non-zero keeps "kctx ctx prod && deploy" from deploying past a declined
+// guard; the values differ so a script can tell a sick cluster (2) from
+// kube-ctx failing (1) by checking $?, which "||" alone cannot do.
 const (
 	// ExitFailure is any error kube-ctx itself hit: unreadable kubeconfig,
 	// unknown context, a bad guard rule.
 	ExitFailure = 1
-	// ExitUnhealthy is doctor's "the clusters answered, and some are sick".
+	// ExitUnhealthy is doctor's "the clusters answered, and some are sick", and
+	// expiry's "something is due, or a context could not be read".
 	ExitUnhealthy = 2
-	// ExitAborted is the user declining a confirmation or closing the picker.
+	// ExitAborted is the user declining a guard confirmation.
 	// 130 is the shell's convention for a command ended by the user.
 	ExitAborted = 130
 )
