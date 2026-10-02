@@ -83,13 +83,8 @@ func TestHookDefinesAWrapperFunction(t *testing.T) {
 			if !strings.Contains(got, "rm -f") {
 				t.Errorf("hook does not clean up its temp file:\n%s", got)
 			}
-			// The wrapper must bypass itself when calling the binary, or it
-			// would recurse forever. bash and zsh use the "command" builtin;
-			// fish uses env, which execs the binary from PATH.
-			//
-			// "env VAR=x command kctx" is specifically wrong: command is a
-			// shell builtin and env can only exec a real binary, so that form
-			// fails with "env: command: No such file or directory".
+			// The wrapper must bypass itself or recurse forever: bash and zsh use
+			// "command" (env cannot exec a builtin), fish uses env.
 			switch tt.sh {
 			case Fish:
 				if !strings.Contains(got, "env "+EnvFile+"=") {
@@ -107,11 +102,8 @@ func TestHookDefinesAWrapperFunction(t *testing.T) {
 	}
 }
 
-// The hook has to name its own shell, because the file it sources must be
-// written in that shell's syntax and $SHELL only names the login shell. A fish
-// user who never ran chsh, or a fish user running bash, would otherwise be
-// handed the other shell's syntax — and get a switch that reports success and
-// changes nothing.
+// Unnamed, the env file's syntax would follow $SHELL, which is only the login
+// shell: a switch that reports success and changes nothing.
 func TestHookNamesItsShell(t *testing.T) {
 	for _, sh := range Shells {
 		got := Hook(sh, "kctx")

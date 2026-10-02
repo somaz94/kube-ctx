@@ -404,11 +404,8 @@ func (c *Config) ResolveBinding(dir string) (context, boundAt string, ok bool) {
 	return context, boundAt, ok
 }
 
-// underDir reports whether dir is parent or a directory inside it.
-//
-// The separator check is what keeps "/srv/apiary" from matching a binding on
-// "/srv/api": a plain prefix test binds directories that merely start with the
-// same letters.
+// underDir reports whether dir is parent or a directory inside it. The
+// separator check keeps "/srv/apiary" from matching a binding on "/srv/api".
 func underDir(dir, parent string) bool {
 	if dir == parent {
 		return true

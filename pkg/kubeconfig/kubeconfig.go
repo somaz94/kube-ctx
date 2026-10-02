@@ -3,8 +3,9 @@
 // Every read and write goes through client-go's clientcmd, which is what
 // kubectl itself uses. That matters most on write: when $KUBECONFIG lists
 // several files, clientcmd knows which of them a given stanza came from and
-// writes the change back to that file. Tools that parse and re-emit the YAML
-// themselves collapse the list into one file and drop comments and key order.
+// writes the change back to that file, leaving the others as they were. Tools
+// that parse and re-emit the YAML themselves collapse the list into one file.
+// The file clientcmd does write still loses its comments and key order.
 package kubeconfig
 
 import (

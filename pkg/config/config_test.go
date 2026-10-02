@@ -359,7 +359,6 @@ func TestBindings(t *testing.T) {
 	if target, _, ok := cfg.ResolveBinding("/srv/api/cmd"); !ok || target != "prod" {
 		t.Errorf("ResolveBinding = %q (ok=%v), want prod", target, ok)
 	}
-	// A directory that merely starts with the same letters is not inside it.
 	if _, _, ok := cfg.ResolveBinding("/srv/apiary"); ok {
 		t.Error("/srv/apiary must not inherit the binding on /srv/api")
 	}

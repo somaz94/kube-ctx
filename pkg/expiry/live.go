@@ -104,15 +104,10 @@ func classifyOverlay(err error) (Skip, bool) {
 	case err == nil, apierrors.IsNotFound(err), apimeta.IsNoMatchError(err):
 		return Skip{}, false
 	default:
-		// Every other overlay failure — forbidden, a webhook down, the
-		// aggregated API returning 503, this context running out of deadline —
-		// costs only the "who renews this" column. Returning the error instead
-		// would throw away every notAfter already read, so a certificate
-		// expiring tomorrow would vanish because cert-manager was unhealthy.
-		//
-		// The reason travels with it: reported bare, a timeout reads as a
-		// permission problem and sends the operator to check RBAC. It is not
-		// Blind — every notAfter was already in hand before this ran.
+		// Forbidden, a webhook down, a 503, this context's deadline: each costs
+		// only the "who renews this" column, so it is a skip, never Blind, and
+		// never an error, which would throw away every notAfter already read.
+		// The reason travels with it: bare, a timeout reads as an RBAC problem.
 		return Skip{
 			Resource: "certificates.cert-manager.io",
 			Reason:   err.Error(),

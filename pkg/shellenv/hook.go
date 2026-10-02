@@ -85,9 +85,7 @@ func Hook(sh Shell, binary string) string {
 // "command" is a shell builtin, and env can only exec a real binary, so
 // "env VAR=x command kctx" fails with "env: command: No such file".
 //
-// The shell name travels with the call because the file this function sources
-// has to be written in this shell's syntax, and only the hook knows which
-// shell that is.
+// EnvShell names this shell because $SHELL is only the login shell.
 func posixHook(sh Shell, name string) string {
 	return fmt.Sprintf(`# kube-ctx shell hook (%[2]s)
 # Makes context and namespace switches local to this shell.
@@ -148,9 +146,7 @@ esac`
 // bypasses the function being defined: env execs the binary found on PATH, so
 // the wrapper cannot call itself.
 //
-// The shell name travels with the call for the same reason as in posixHook:
-// $SHELL is the login shell, and a fish user who has not run chsh would
-// otherwise get bash syntax written into the file this function sources.
+// EnvShell names this shell because $SHELL is only the login shell.
 func fishHook(name string) string {
 	return fmt.Sprintf(`# kube-ctx shell hook (fish)
 # Makes context and namespace switches local to this shell.

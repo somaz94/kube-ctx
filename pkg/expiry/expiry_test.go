@@ -289,10 +289,9 @@ func TestCertNotAfterRejectsPEMWithNoCertificate(t *testing.T) {
 	}
 }
 
-// The command calls Within twice — once for what counts as due, once for what
-// --all shows. Result is copied but its Items slice header is not, so the two
-// filters must not be able to see or corrupt each other, or the exit status
-// would be decided on data the table never showed.
+// The command calls Within twice (what is due, what --all shows). A copied
+// Result still shares its Items backing array, so a filter working in place
+// would decide the exit status on data the table never showed.
 func TestWithinCallsDoNotAliasEachOther(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	results := []Result{{Context: "a", Items: []Item{

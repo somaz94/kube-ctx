@@ -161,7 +161,6 @@ func (p *Picker) readKeys(model *Model, pending []byte) ([]byte, error) {
 	for len(pending) > 0 {
 		key, consumed := DecodeKey(pending)
 		if consumed == 0 {
-			// An incomplete sequence at the end of the buffer: wait for more.
 			return pending, nil
 		}
 		pending = pending[consumed:]

@@ -35,7 +35,6 @@ func TestFetchLiveWritesCache(t *testing.T) {
 		t.Errorf("Namespaces = %v, want %v (sorted)", got.Namespaces, want)
 	}
 
-	// The second call must be served from the fresh cache without calling live.
 	got = Fetch(context.Background(), "dev", failingList(errors.New("must not be called")), Options{CacheDir: dir})
 	if got.Source != SourceCacheFresh {
 		t.Errorf("Source = %v, want cache", got.Source)
@@ -198,7 +197,6 @@ func TestLiveSurfacesAPIErrors(t *testing.T) {
 		t.Fatal("expected an error")
 	}
 
-	// An unusable rest.Config must fail at client construction.
 	bad := &rest.Config{
 		Host:         srv.URL,
 		ExecProvider: &clientcmdapi.ExecConfig{},

@@ -192,9 +192,8 @@ func (s *Sweeper) Run(ctx context.Context, cfg *clientcmdapi.Config, names []str
 func (s *Sweeper) sweepOne(ctx context.Context, name string, timeout time.Duration) Result {
 	result := Result{Context: name}
 
-	// Sweeper is exported, so &Sweeper{} builds. Every other field defaults
-	// itself in Run; this one cannot, and the panic would come out of a
-	// goroutine with nothing to catch it.
+	// &Sweeper{} builds, and unlike every other field this one has no default:
+	// the nil call would panic in a goroutine with nothing to catch it.
 	if s.RestConfig == nil {
 		result.Err = "sweeper has no RestConfig function"
 		return result

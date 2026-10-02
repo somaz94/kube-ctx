@@ -159,10 +159,8 @@ func TestPickerWriteError(t *testing.T) {
 
 func TestPickerSplitEscapeSequence(t *testing.T) {
 	var out bytes.Buffer
-	// A terminal can split an arrow key across reads. An incomplete CSI must
-	// be held until the rest arrives rather than acted on or dropped.
-	// (A lone ESC byte is deliberately *not* held: it is how the user aborts,
-	// and nothing distinguishes it from a truncated sequence.)
+	// An incomplete CSI is held for the next read. The split is after "[", not
+	// ESC: a lone ESC aborts, as nothing tells it from a truncated sequence.
 	p := newTestPicker("", &out)
 	p.In = &chunkReader{chunks: []string{"\x1b[", "B", "\r"}}
 

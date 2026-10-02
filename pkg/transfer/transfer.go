@@ -10,9 +10,9 @@
 // independent namespaces (contexts, clusters, users) and the interesting
 // sources collide in all of them: every kubeadm cluster calls its cluster
 // "kubernetes" and its user "kubernetes-admin", and every kind cluster calls
-// its context "kind-<name>". "kubectl config view --flatten" merges those by
-// last-writer-wins, which silently repoints an existing context at a different
-// API server. Merge never overwrites a stanza whose contents differ; it
+// its context "kind-<name>". "kubectl config view --flatten" merges those
+// first-writer-wins, so a context from one file silently lands on the other
+// file's API server. Merge never overwrites a stanza whose contents differ; it
 // disambiguates the incoming one and repoints only the context it is importing.
 package transfer
 
