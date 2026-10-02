@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/somaz94/kube-ctx/pkg/paths"
 )
+
+// ErrTooFarBack is returned by Lookup when history is shorter than the step
+// asked for. The caller says what the history was of: one type backs both the
+// context and the per-context namespace stacks.
+var ErrTooFarBack = errors.New("history does not go back that far")
 
 const (
 	// historyLimit is how many previous contexts are remembered.
@@ -104,7 +110,7 @@ func (h *History) Lookup(n int) (string, error) {
 		return "", err
 	}
 	if len(entries) < n {
-		return "", fmt.Errorf("no context %d step(s) back in history", n)
+		return "", ErrTooFarBack
 	}
 	return entries[n-1], nil
 }

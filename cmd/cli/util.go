@@ -98,6 +98,14 @@ func historyRef(args []string, back int) int {
 	return back
 }
 
+// stepsBack renders a history distance as "1 step" or "N steps".
+func stepsBack(n int) string {
+	if n == 1 {
+		return "1 step"
+	}
+	return fmt.Sprintf("%d steps", n)
+}
+
 // contextWithTimeout returns a context bounded by d, or an unbounded one when d
 // is not positive.
 func contextWithTimeout(d time.Duration) (context.Context, context.CancelFunc) {

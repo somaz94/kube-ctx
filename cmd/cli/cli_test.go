@@ -195,8 +195,11 @@ func TestCtxBackFlagEqualsDashN(t *testing.T) {
 func TestCtxEmptyHistory(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
-	if err := h.run("ctx", "-"); err == nil {
-		t.Error("expected an error with no history")
+	if err := h.run("ctx", "-"); err == nil || err.Error() != "no context 1 step back in history" {
+		t.Errorf("ctx - err = %v", err)
+	}
+	if err := h.run("ctx", "-2"); err == nil || !strings.Contains(err.Error(), "2 steps back") {
+		t.Errorf("ctx -2 err = %v", err)
 	}
 }
 
@@ -298,8 +301,10 @@ func TestNsPreviousIsPerContext(t *testing.T) {
 	if err := h.run("ctx", "prod"); err != nil {
 		t.Fatalf("ctx prod: %v", err)
 	}
-	if err := h.run("ns", "-"); err == nil {
-		t.Error("expected an error: prod has no namespace history of its own")
+	// Named as a namespace: the shared history type used to call it a context.
+	err := h.run("ns", "-")
+	if err == nil || err.Error() != "no namespace 1 step back in the history of context prod" {
+		t.Errorf("ns - err = %v; prod has no namespace history of its own", err)
 	}
 }
 

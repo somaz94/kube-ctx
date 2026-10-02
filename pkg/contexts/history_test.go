@@ -1,6 +1,7 @@
 package contexts
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -87,8 +88,8 @@ func TestHistoryLookup(t *testing.T) {
 	if got, err := h.Lookup(2); err != nil || got != "dev" {
 		t.Errorf("Lookup(2) = %q, %v; want dev", got, err)
 	}
-	if _, err := h.Lookup(3); err == nil {
-		t.Error("expected an error past the end of history")
+	if _, err := h.Lookup(3); !errors.Is(err, ErrTooFarBack) {
+		t.Errorf("Lookup(3) err = %v, want ErrTooFarBack", err)
 	}
 	if _, err := h.Lookup(0); err == nil {
 		t.Error("expected an error for position 0")

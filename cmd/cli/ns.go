@@ -108,7 +108,12 @@ func resolveNamespaceArg(cfg *clientcmdapi.Config, args []string, back int) (str
 		if err != nil {
 			return "", err
 		}
-		return history.Lookup(back)
+		target, err := history.Lookup(back)
+		if errors.Is(err, contexts.ErrTooFarBack) {
+			return "", fmt.Errorf("no namespace %s back in the history of context %s",
+				stepsBack(back), cfg.CurrentContext)
+		}
+		return target, err
 	}
 	if len(args) == 0 {
 		return "", nil

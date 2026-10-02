@@ -76,7 +76,11 @@ func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int
 		if err != nil {
 			return "", err
 		}
-		return history.Lookup(back)
+		target, err := history.Lookup(back)
+		if errors.Is(err, contexts.ErrTooFarBack) {
+			return "", fmt.Errorf("no context %s back in history", stepsBack(back))
+		}
+		return target, err
 	}
 
 	if len(args) == 0 {
