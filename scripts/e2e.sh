@@ -162,6 +162,10 @@ setup() {
     Set E2E_ALLOW_DANGER=1 if you really mean this one."
   fi
 
+  # Started from a managed terminal, every check would run inside that
+  # terminal's session, binding and depth instead of the workspace's.
+  unset "${!KUBE_CTX_@}"
+
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/kctx-e2e.XXXXXXXX")"
   if [ -n "${KCTX_E2E_KEEP:-}" ]; then
     trap 'printf "\nworkspace kept at %s\n" "$WORK"' EXIT
