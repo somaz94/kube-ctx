@@ -86,9 +86,9 @@ Situations kube-ctx was built for, and what it does about them.
 
 ## The multi-file $KUBECONFIG
 
-**The problem.** You keep `~/.kube/config` plus a per-project file, merged through `$KUBECONFIG`. A tool that rewrites the YAML collapses them into one file, loses your comments, and reorders every key.
+**The problem.** You keep `~/.kube/config` plus a per-project file, merged through `$KUBECONFIG`. A tool that rewrites the YAML collapses them into one file.
 
-**What kube-ctx does.** All reads and writes go through client-go's `clientcmd` — the same code path `kubectl config` uses. Each change is written back to the file its stanza came from.
+**What kube-ctx does.** All reads and writes go through client-go's `clientcmd` — the same code path `kubectl config` uses. Each change is written back to the file its stanza came from. That file is still re-serialized, so its comments and key order do not survive — the same as under `kubectl config`.
 
 <br/>
 

@@ -274,4 +274,4 @@ Backups are taken before [durable edits](#durable-edits-inside-a-managed-shell) 
 
 ## Multiple kubeconfig files
 
-`$KUBECONFIG` may list several files. kube-ctx reads the merged view and, on write, sends each change back to the file its stanza came from — the same routing `kubectl config` performs, because it is the same code (`clientcmd`). Tools that parse and re-emit the YAML themselves collapse the list into one file and lose comments and key order.
+`$KUBECONFIG` may list several files. kube-ctx reads the merged view and, on write, sends each change back to the file its stanza came from — the same routing `kubectl config` performs, because it is the same code (`clientcmd`). Tools that parse and re-emit the YAML themselves collapse the list into one file. Each file kube-ctx does write still loses its comments and key order, since `clientcmd` re-serializes it.
