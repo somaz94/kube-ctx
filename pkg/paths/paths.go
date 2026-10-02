@@ -35,14 +35,7 @@ func CacheDir() (string, error) {
 // reboot but is not user-editable: context history, kubeconfig backups, and
 // the per-shell kubeconfig copies.
 func StateDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	if base := os.Getenv("XDG_STATE_HOME"); base != "" {
-		return filepath.Join(base, appName), nil
-	}
-	return filepath.Join(home, ".local", "state", appName), nil
+	return resolve("XDG_STATE_HOME", filepath.Join(".local", "state"))
 }
 
 // resolve returns $envVar/kube-ctx when envVar is set, else ~/fallback/kube-ctx.

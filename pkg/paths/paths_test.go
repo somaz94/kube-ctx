@@ -94,3 +94,29 @@ func TestResolveWithoutHome(t *testing.T) {
 		}
 	}
 }
+
+// A set XDG variable wins even with no home directory to fall back to;
+// StateDir used to ask for the home directory first and fail.
+func TestXDGWinsWithoutHome(t *testing.T) {
+	t.Setenv("HOME", "")
+	base := t.TempDir()
+
+	for name, tt := range map[string]struct {
+		env string
+		fn  func() (string, error)
+	}{
+		"ConfigDir": {"XDG_CONFIG_HOME", ConfigDir},
+		"CacheDir":  {"XDG_CACHE_HOME", CacheDir},
+		"StateDir":  {"XDG_STATE_HOME", StateDir},
+	} {
+		t.Setenv(tt.env, base)
+		got, err := tt.fn()
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if want := filepath.Join(base, appName); got != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+}
