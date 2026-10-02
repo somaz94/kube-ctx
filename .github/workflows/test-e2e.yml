@@ -24,9 +24,7 @@ concurrency:
 jobs:
   test-e2e:
     name: E2E Suite
-    # Gate the kind-based e2e on fork PRs: push/dispatch and same-repo PRs
-    # always run; a fork PR runs only after a maintainer comments /ok-to-test
-    # (which applies the ok-to-test label).
+    # Fork PRs wait for a maintainer's /ok-to-test, which applies the label.
     if: >
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository ||
@@ -46,11 +44,8 @@ jobs:
       - name: Build binary
         run: make build
 
-      # The suite drives the shell hook through real processes, because that is
-      # the only place the bug it guards against can appear: exports written in
-      # the wrong shell's syntax fail to source, and kube-ctx still reports a
-      # successful switch. Missing shells are skipped, not failed, so fish being
-      # unavailable never turns the job red on its own.
+      # Wrong-shell exports only fail when a real shell sources them.
+      # A missing shell is skipped, not failed, so fish is best-effort.
       - name: Install the shells the hook is generated for
         run: |
           sudo apt-get update

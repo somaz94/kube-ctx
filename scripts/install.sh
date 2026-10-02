@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installer script
 # Usage: curl -fsSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 #
 # Set INSTALL_DIR to install somewhere else — useful for a directory you own,

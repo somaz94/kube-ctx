@@ -46,8 +46,6 @@ jobs:
             exit 1
           fi
 
-      # The repo configures golangci-lint in .golangci.yml and exposes it as
-      # "make lint"; without this step CI never actually enforced it.
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

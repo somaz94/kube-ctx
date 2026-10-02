@@ -27,10 +27,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 KCTX_BIN="${KCTX:-$REPO_ROOT/bin/kctx}"
 
-# Context names the suite creates. They are fixed rather than derived from the
-# source cluster so every assertion below can name them literally, and they are
-# chosen to exercise the built-in guard patterns: prod- is DANGER, staging- is
-# WARN, and live- matches nothing.
+# Fixed names that hit the built-in guard patterns: prod- is DANGER, staging-
+# is WARN, live- matches nothing.
 LIVE="live-e2e"
 STAGING="staging-e2e"
 PROD="prod-e2e"
@@ -52,8 +50,6 @@ E2E_STATUS=0
 E2E_OUTPUT=""
 HOOK_SESSIONS=""
 HOOK_SHELLS=0
-
-# --- reporting ---------------------------------------------------------------
 
 die() {
   printf "${RED}e2e: %s${RESET}\n" "$1" >&2
@@ -83,12 +79,8 @@ fail() {
   fi
 }
 
-# --- running and asserting ---------------------------------------------------
-
-# capture runs a command, recording its combined output and exit status without
-# tripping set -e. Never call it from a pipeline: a pipeline element runs in a
-# subshell and the recorded values would be discarded with it. Feed input by
-# redirecting a file instead.
+# Sets E2E_OUTPUT and E2E_STATUS without tripping set -e. Never pipe into it:
+# the subshell discards both. Redirect a file instead.
 capture() {
   E2E_STATUS=0
   E2E_OUTPUT="$("$@" 2>&1)" || E2E_STATUS=$?
@@ -124,8 +116,6 @@ assert_eq() {
   fi
 }
 
-# --- kubeconfig probes -------------------------------------------------------
-
 current_context() { kubectl config current-context 2>/dev/null || true; }
 
 context_names() { kubectl config view -o jsonpath='{.contexts[*].name}'; }
@@ -134,10 +124,8 @@ context_namespace() {
   kubectl config view -o jsonpath="{.contexts[?(@.name==\"$1\")].context.namespace}"
 }
 
-# state_count counts the files kube-ctx has written under one state directory.
-# The directory is created lazily — backups/ does not exist until the first
-# destructive edit — and under "set -o pipefail" a find that cannot open it
-# would fail the whole script rather than answering zero.
+# The directory is created lazily (backups/ only on the first durable edit),
+# and under pipefail a find that cannot open it would fail the script, not say 0.
 state_count() {
   local dir="$XDG_STATE_HOME/kube-ctx/$1"
   if [ ! -d "$dir" ]; then
@@ -149,13 +137,9 @@ state_count() {
 session_count() { state_count shells; }
 backup_count() { state_count backups; }
 
-# has_tty reports whether a controlling terminal is reachable. The picker opens
-# /dev/tty directly, so the commands that fall back to plain listing only do so
-# where there is no terminal — in CI. Run from a real shell they would open the
-# picker and block forever, so those checks are skipped instead.
+# The picker opens /dev/tty directly: with a terminal present, the no-argument
+# checks would block on it forever, so they run only without one (CI).
 has_tty() { (exec 3<>/dev/tty) 2>/dev/null; }
-
-# --- setup -------------------------------------------------------------------
 
 setup() {
   command -v kubectl >/dev/null 2>&1 || die "kubectl is required"
@@ -166,11 +150,8 @@ setup() {
   source_context="${E2E_CONTEXT:-$(kubectl config current-context 2>/dev/null || true)}"
   [ -n "$source_context" ] || die "no current context — create one with: make e2e-cluster"
 
-  # The kubeconfig is only ever copied, but the copy still points at the real
-  # cluster and the suite calls it. Running "make e2e" with production current
-  # is the easy mistake, so refuse the contexts kube-ctx's own default rules
-  # would badge DANGER. The pattern is the danger rule from
-  # pkg/config.DefaultGuards.
+  # The copy still reaches the real cluster, so refuse what the default rules
+  # badge DANGER. Keep the regex in sync with pkg/config.DefaultGuards.
   if printf '%s' "$source_context" | grep -Eq '(^|[-_.])(prod|prd|production)([-_.]|$)'; then
     [ -n "${E2E_ALLOW_DANGER:-}" ] || die "refusing to run against \"$source_context\": the default guard rules
     classify it as production, and this suite calls a live API server. Point it
@@ -227,8 +208,6 @@ setup() {
   info "source:    $source_context"
   info "workspace: $WORK"
 }
-
-# --- checks ------------------------------------------------------------------
 
 check_basics() {
   section "Reading a real kubeconfig"
@@ -372,8 +351,6 @@ EOF
   assert_eq "0" "$(session_count)" "the session copy is removed on exit"
 }
 
-# hook_probe writes and runs a script that installs the shell hook in a real
-# shell, switches context, and reports what the shell ended up with.
 hook_probe() {
   local sh="$1"
   local script="$WORK/hook-$sh"
@@ -436,13 +413,8 @@ check_hook() {
   fi
 }
 
-# bind_probe runs a real shell that installs the hook, walks through bound and
-# unbound directories, and reports the context after each move.
-#
-# bash is run interactively with the script on stdin, and that is not incidental:
-# it has no directory-change hook, so the binding is applied from PROMPT_COMMAND,
-# which only runs when a prompt is drawn. A non-interactive "bash script" would
-# report that bindings do not work at all.
+# bash runs interactively on stdin: with no directory-change hook, bindings
+# apply from PROMPT_COMMAND, which only runs when a prompt is drawn.
 bind_probe() {
   local sh="$1"
   local script="$WORK/bind-$sh"
@@ -535,9 +507,6 @@ check_bind() {
   assert_status 0 "... and the other one"
 }
 
-# The form kubectx trained everyone to type. Worth a real kubeconfig: the
-# assertion that matters is that a name reaches the switch while a subcommand
-# name still reaches the subcommand.
 check_bare_switch() {
   section "A bare name switches, the way kubectx takes it"
 
@@ -775,7 +744,7 @@ check_edits() {
 check_sessions() {
   section "Session copies on disk"
 
-  # check_hook left one copy per shell behind, from terminals that are gone.
+  # check_hook and check_bind left copies behind, from terminals that are gone.
   capture kctx sessions
   assert_status 0 "sessions lists what is on disk"
   if [ "$HOOK_SHELLS" -gt 0 ]; then
@@ -861,9 +830,8 @@ check_transfer() {
   capture kctx export "$LIVE" --flatten -f "$exported"
   assert_status 0 "export writes a standalone kubeconfig"
 
-  # The whole point of an export is that something else can use it. Only a real
-  # kubectl against a real cluster proves --flatten inlined what it had to:
-  # unit tests see a file that still resolves because the source paths are there.
+  # Proves the export works on its own. Paths here resolve with or without
+  # --flatten; TestExportFlattenInlinesCertificates checks the inlining.
   assert_eq "$LIVE" "$(KUBECONFIG="$exported" kubectl config current-context 2>/dev/null || true)" \
     "kubectl reads the export back"
 
@@ -897,10 +865,8 @@ check_transfer() {
   capture kctx import "$exported" --as imported-e2e
   assert_contains "unchanged" "re-importing the same file changes nothing"
 
-  # Overwriting $PROD repoints it away from the unreachable cluster only it used,
-  # so that stanza is left unreferenced. Only a real write proves the prune
-  # reaches the file: clientcmd has to delete the stanza, not merely drop it from
-  # the in-memory config.
+  # Overwriting $PROD orphans offline-e2e. Only a real write proves --prune
+  # deletes the stanza from the file, not just from the in-memory config.
   local live_cluster
   live_cluster="$(kubectl config view -o jsonpath='{.contexts[?(@.name=="imported-e2e")].context.cluster}')"
   capture kctx import "$exported" --as "$PROD" --overwrite
@@ -920,8 +886,6 @@ check_transfer() {
   capture kctx doctor imported-e2e --timeout 10s
   assert_status 0 "the surviving context still reaches the cluster"
 }
-
-# --- main --------------------------------------------------------------------
 
 main() {
   printf '%b\n' "${BOLD}kctx end-to-end suite${RESET}"
