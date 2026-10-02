@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/somaz94/kube-ctx/pkg/config"
-	"github.com/somaz94/kube-ctx/pkg/contexts"
 )
 
 // newAliasCmd manages short names for contexts.
@@ -76,17 +75,18 @@ func runAlias(a *app, args []string, remove string) error {
 		if err != nil {
 			return err
 		}
-		if !contexts.Exists(kubeCfg, args[1]) {
-			return fmt.Errorf("no context named %q", args[1])
+		target, err := resolveContext(a, kubeCfg, args[1])
+		if err != nil {
+			return err
 		}
-		if err := userCfg.SetAlias(args[0], args[1]); err != nil {
+		if err := userCfg.SetAlias(args[0], target); err != nil {
 			return err
 		}
 		if err := userCfg.Save(); err != nil {
 			return err
 		}
 		pal := a.palette()
-		_, err = fmt.Fprintf(a.out, "Alias %s now points at %s.\n", pal.Bold(args[0]), pal.Cyan(args[1]))
+		_, err = fmt.Fprintf(a.out, "Alias %s now points at %s.\n", pal.Bold(args[0]), pal.Cyan(target))
 		return err
 
 	case len(args) == 1:

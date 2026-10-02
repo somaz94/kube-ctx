@@ -568,6 +568,31 @@ func TestAliasErrors(t *testing.T) {
 	}
 }
 
+// Completion offers aliases for the target, so the target goes through the
+// same resolver as every other context argument instead of a bare lookup.
+func TestAliasTargetResolvesAliasesAndDot(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	if err := h.run("alias", "p", "prod"); err != nil {
+		t.Fatalf("alias p prod: %v", err)
+	}
+	if err := h.run("alias", "q", "p"); err != nil {
+		t.Fatalf("alias q p: %v", err)
+	}
+	if err := h.run("alias", "here", "."); err != nil {
+		t.Fatalf("alias here .: %v", err)
+	}
+
+	for _, tt := range []struct{ alias, want string }{{"q", "prod"}, {"here", "dev"}} {
+		if err := h.run("ctx", tt.alias); err != nil {
+			t.Fatalf("ctx %s: %v", tt.alias, err)
+		}
+		if got := h.config().CurrentContext; got != tt.want {
+			t.Errorf("ctx %s landed on %q, want %q", tt.alias, got, tt.want)
+		}
+	}
+}
+
 func TestVersion(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
