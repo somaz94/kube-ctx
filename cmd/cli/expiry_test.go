@@ -136,6 +136,10 @@ func TestExpiryOverlayFailureIsNotUnknown(t *testing.T) {
 	if !strings.Contains(h.stderr(), "deadline exceeded") {
 		t.Errorf("stderr = %q, want the real reason", h.stderr())
 	}
+	// Nothing is due, so no table: a header with no rows reads as broken.
+	if h.stdout() != "" || !strings.Contains(h.stderr(), "Nothing expires within") {
+		t.Errorf("stdout = %q, stderr = %q, want the empty-window message", h.stdout(), h.stderr())
+	}
 }
 
 // cert-manager meant to renew and the date went by. Rendered as a plain

@@ -165,15 +165,6 @@ const everything = 200 * 365
 
 // renderExpiryTable prints one row per expiring certificate.
 func renderExpiryTable(a *app, current string, results []expiry.Result, now time.Time, opts expiryOptions) error {
-	if len(results) == 0 {
-		if opts.all {
-			_, err := fmt.Fprintln(a.errOut, "No certificates found.")
-			return err
-		}
-		_, err := fmt.Fprintf(a.errOut, "Nothing expires within %d days.\n", opts.days)
-		return err
-	}
-
 	pal := a.palette()
 	rows := make([][]string, 0)
 	for _, r := range results {
@@ -197,6 +188,18 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 				expiryCell(pal, item, now),
 			})
 		}
+	}
+
+	// Decided on rows, not results: Within keeps a context that only lost the
+	// cert-manager overlay, which has nothing to show here and would otherwise
+	// print a bare header. reportSkipped says what was skipped.
+	if len(rows) == 0 {
+		if opts.all {
+			_, err := fmt.Fprintln(a.errOut, "No certificates found.")
+			return err
+		}
+		_, err := fmt.Fprintf(a.errOut, "Nothing expires within %d days.\n", opts.days)
+		return err
 	}
 
 	// renderTable, not renderOutput: runExpiry has already branched on -o json
