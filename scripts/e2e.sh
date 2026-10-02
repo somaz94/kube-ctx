@@ -763,7 +763,19 @@ check_sessions() {
   capture kctx sessions
   assert_status 0 "sessions lists what is on disk"
   if [ "$HOOK_SHELLS" -gt 0 ]; then
-    assert_contains "$LIVE" "... naming the context each copy is on"
+    # Matched by ID: other checks leave copies too, so a context name anywhere in
+    # the table proves nothing. Each hook copy was opened on $STAGING and left on
+    # $PROD, so $PROD says the column is read back from the copy.
+    capture kctx sessions -o json
+    local session id named=0
+    while IFS= read -r session; do
+      [ -n "$session" ] || continue
+      id="$(basename "$session" .yaml)"
+      if [ "$(printf '%s' "$E2E_OUTPUT" | jq -r --arg id "$id" '.[] | select(.id == $id) | .context')" = "$PROD" ]; then
+        named=$((named + 1))
+      fi
+    done <<<"$HOOK_SESSIONS"
+    assert_eq "$HOOK_SHELLS" "$named" "... naming the context each hook copy is on"
   fi
 
   # Recently used, so nothing is swept even though no shell owns them.
