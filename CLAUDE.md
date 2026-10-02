@@ -71,7 +71,8 @@ without asking — they are the release pipeline.
   `clientcmd`. On write that matters: with a multi-file `$KUBECONFIG`, changes
   land back in the file each stanza came from. Never re-emit the YAML by hand.
 - **Backups** — `Save(cfg, WithBackup())` snapshots every kubeconfig file first.
-  Used by destructive edits (rename, delete) only; a plain switch skips it.
+  Used by the durable edits (rename, delete, import) only; a plain switch
+  skips it.
 - **Transfer** (`pkg/transfer`) — `Merge` for `import`, `Extract` for `export`,
   both in memory. Three things there are non-obvious. A colliding cluster or
   user stanza is never replaced when its contents differ — that is how
@@ -95,10 +96,10 @@ without asking — they are the release pipeline.
   the age is *time since last use*: `Touch` runs from the root command's
   `PersistentPreRunE`, so any kube-ctx command in a session refreshes it.
   Without that the sweep is a live bug rather than housekeeping — nothing else
-  rewrites a session copy except a context switch, so a terminal open past
-  `DefaultMaxAge` without switching would have its kubeconfig deleted while
-  `$KUBECONFIG` still pointed at it. `kctx sessions` surfaces the same list, and
-  never removes the caller's own copy.
+  rewrites a session copy except a context or namespace switch, so a terminal
+  open past `DefaultMaxAge` without switching would have its kubeconfig deleted
+  while `$KUBECONFIG` still pointed at it. `kctx sessions` surfaces the same
+  list, and never removes the caller's own copy.
 - **Directory bindings** (`cmd/cli/bind.go`) — `kctx bind` maps a directory to
   a context, and the shell hook runs `bind --apply` on every directory change.
   Three rules make it livable rather than bossy: it applies once per tree
@@ -136,9 +137,9 @@ without asking — they are the release pipeline.
   `contexts` (exact names), `prefix` or `suffix`; zero or two is an error,
   because a rule that matches everything or silently half-applies is worse than
   none. `kctx guard` writes them, prepending so a new rule beats the defaults.
-  `confirm` gates every route to a cluster — `ctx`, `shell` and `exec` all call
-  `requireGuardConfirmation`; covering only `ctx` left `kctx exec prod -- ...`
-  walking straight past the guard.
+  `confirm` gates every route to a cluster — `ctx`, `shell`, `exec` and
+  `export` all call `requireGuardConfirmation`; covering only `ctx` left
+  `kctx exec prod -- ...` walking straight past the guard.
 - **The second guard axis** (`Guard.Namespaces`) — a rule listing namespaces
   classifies those *inside* the contexts it matches and stops classifying the
   context, because one rule has one `level` and the two verdicts differ: a
@@ -164,7 +165,10 @@ without asking — they are the release pipeline.
   terminal hides it by delivering one line per `Read`; piped answers do not,
   and two questions in one command became ordinary once a guarded context and
   a guarded namespace started being asked separately. It is a pointer so
-  `promptingOnStderr`'s copy shares the position.
+  `promptingOnStderr`'s copy shares the position, and `promptingOnStderr`
+  creates the reader before handing it to the copy — a nil pointer copied
+  shares nothing, so each view built its own reader and the second answer was
+  swallowed.
 - **Expiry is not doctor** (`pkg/expiry`) — `doctor` asks whether a cluster
   works now and calls a sick one a failure; `expiry` asks what breaks in N
   days, where nothing is wrong yet. Folding them together would make a
@@ -178,7 +182,8 @@ without asking — they are the release pipeline.
   is renamed to the Certificate rather than the secret. The first *CERTIFICATE*
   block is the leaf: a `tls.crt` carries intermediates that outlive it, so
   reading the last would call a dead certificate healthy for years, and it can
-  lead with a preamble, so taking the first block of any type drops a readable
+  lead with a block of another type — a `TRUSTED CERTIFICATE`, say — so taking
+  the first block of any type drops a readable
   secret in silence. Two things gate the exit status, not one: something due,
   *or* a context that could not be read — a sweep that reached nothing has not
   established that nothing is wrong there, and `kctx expiry || notify` going
@@ -200,9 +205,11 @@ without asking — they are the release pipeline.
   `--all` widens only what is shown; letting it widen the threshold would exit
   2 on any cluster holding one TLS secret.
 - **Exit codes** (`cmd/cli/root.go`) — `1` kube-ctx failed, `2` doctor found a
-  sick cluster or expiry found something due, `130` the user declined.
-  Distinct because the uses are shell one-liners: `&&` must not proceed past a declined guard, and `||` must not
-  page on a typo'd `--kubeconfig`.
+  sick cluster or expiry found something due, `130` the user declined a
+  confirmation or closed the picker. Distinct because the uses are shell
+  one-liners: `&&` must not proceed past a declined guard or a closed picker,
+  and a script that pages on a sick cluster has to tell it apart from a typo'd
+  `--kubeconfig` — `||` fires on both, so such a script branches on `$?`.
 - **A bare name switches** (`NewRootCmd`, `cmd/cli/root.go`) — `kctx prod` is
   `kctx ctx prod`, because that is what fingers trained on kubectx type first
   and `Args: cobra.NoArgs` answered it with "unknown command" for a context
@@ -216,9 +223,11 @@ without asking — they are the release pipeline.
   it — `kctx list` has to keep listing — and `kctx ctx list` is the escape
   hatch.
 - **One resolver** (`cmd/cli/util.go`) — every command taking a context name
-  goes through `resolveContext`: `.` expansion, alias, existence. Completion
+  goes through `resolveContext`: `.` expansion, alias, existence. A context's
+  own name beats an alias of the same name and `@name` forces the alias — when
+  the alias won, the context it shadowed was unreachable by name. Completion
   offers aliases everywhere, so a command that skipped it would suggest inputs
-  it then rejects.
+  it then rejects. An alias that shadows a context is offered in its `@` form.
 - **Output seam** (`cmd/cli/util.go`) — `renderOutput` picks table or JSON so a
   new command cannot accept `-o json` and ignore it. `-o plain` means
   `--no-color`; an unknown `-o` is an error, never a fallback. JSON keys are
@@ -228,8 +237,10 @@ without asking — they are the release pipeline.
 - **Picker** (`pkg/picker`) — scoring, key decoding and the model are pure; the
   runner takes plain `io.Reader`/`io.Writer` plus an optional raw-mode hook, so
   a session is testable without a terminal. Weights are fzf-shaped, and
-  `gapStart` deliberately exceeds `bonusBoundary` or "p-r-o" would outrank
-  "prod" for the query "pro".
+  `gapStart + bonusConsecutive` deliberately exceeds `bonusBoundary`, or
+  "p-r-o" would tie or outrank "prod" for the query "pro" — after the first
+  character, each of p-r-o's word-start matches earns the boundary bonus but
+  forgoes the consecutive bonus and pays the gap.
 - **Sessions** (`pkg/shellenv`) — a per-terminal kubeconfig copy plus the shell
   function that exports `$KUBECONFIG` at it. The hook passes an env file rather
   than parsing stdout, because the picker draws on the same terminal. bash and
@@ -258,10 +269,10 @@ without asking — they are the release pipeline.
   macOS keeps the symlink and looks fine, which is how this would have shipped
   broken on the platform most kubectl users are on.
 - **Durable edits are refused in a session** — inside a managed shell
-  `$KUBECONFIG` is a copy that dies with the shell, so `rename` and `delete`
-  stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than reporting a
-  success that disappears on exit. Switching is meant to be shell-local; an
-  edit is not.
+  `$KUBECONFIG` is a copy that dies with the shell, so `rename`, `delete` and
+  `import` stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than
+  reporting a success that disappears on exit. Switching is meant to be
+  shell-local; an edit is not.
 
 <br/>
 
