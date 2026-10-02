@@ -341,9 +341,11 @@ func trimError(err error) string {
 	if i := strings.IndexByte(msg, '\n'); i >= 0 {
 		msg = msg[:i]
 	}
+	// Cut by rune: a byte cut can split a multibyte character and leave
+	// invalid UTF-8 in the table and the JSON.
 	const maxLen = 120
-	if len(msg) > maxLen {
-		msg = msg[:maxLen-1] + "…"
+	if runes := []rune(msg); len(runes) > maxLen {
+		msg = string(runes[:maxLen-1]) + "…"
 	}
 	return msg
 }

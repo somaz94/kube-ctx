@@ -400,6 +400,12 @@ func TestTrimError(t *testing.T) {
 	if got := trimError(errors.New("first\nsecond")); got != "first" {
 		t.Errorf("trimError = %q, want first", got)
 	}
+
+	korean := trimError(errors.New(strings.Repeat("연결 거부", 60)))
+	if !utf8.ValidString(korean) || utf8.RuneCountInString(korean) != 120 {
+		t.Errorf("trimmed %d runes, valid UTF-8 %v; want 120 and true",
+			utf8.RuneCountInString(korean), utf8.ValidString(korean))
+	}
 }
 
 // makeCert returns a self-signed certificate in PEM form expiring at notAfter.
