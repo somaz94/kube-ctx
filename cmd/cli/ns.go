@@ -66,7 +66,7 @@ func runNs(a *app, args []string, back int, refresh bool, timeout time.Duration)
 		target, err = chooseNamespace(a, cfg, refresh, timeout)
 		switch {
 		case errors.Is(err, picker.ErrAborted):
-			return nil // the user changed their mind; nothing to report
+			return &exitError{code: ExitAborted}
 		case err != nil:
 			return err
 		case target == "":

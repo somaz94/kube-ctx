@@ -463,8 +463,9 @@ func TestDeleteRequiresConfirmation(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	h.stdin("n\n")
 
-	if err := h.run("delete", "prod"); err != nil {
-		t.Fatalf("delete: %v", err)
+	// Declining reads as declining, or "kctx delete prod && ..." carries on.
+	if code := ExitCode(h.run("delete", "prod")); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
 	}
 	if _, ok := h.config().Contexts["prod"]; !ok {
 		t.Error("context deleted despite declining")
@@ -794,8 +795,8 @@ func TestCtxPickerAbortChangesNothing(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	scriptPicker(t, "\x03")
 
-	if err := h.run("ctx"); err != nil {
-		t.Fatalf("aborting the picker should not be an error: %v", err)
+	if code := ExitCode(h.run("ctx")); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
 	}
 	if got := h.config().CurrentContext; got != "dev" {
 		t.Errorf("current = %q, want dev", got)
@@ -823,8 +824,8 @@ func TestNsPickerAbortChangesNothing(t *testing.T) {
 	seedNamespaceCache(t, "dev", "default", "kube-system")
 	scriptPicker(t, "\x03")
 
-	if err := h.run("ns"); err != nil {
-		t.Fatalf("aborting the picker should not be an error: %v", err)
+	if code := ExitCode(h.run("ns")); code != ExitAborted {
+		t.Errorf("ExitCode = %d, want %d", code, ExitAborted)
 	}
 	if got := h.config().Contexts["dev"].Namespace; got != "" {
 		t.Errorf("namespace = %q, want it untouched", got)

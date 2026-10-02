@@ -53,11 +53,7 @@ func runDelete(a *app, names []string, pruneOrphans bool) error {
 
 	pal := a.palette()
 	ok, err := confirm(a, fmt.Sprintf("Delete context %s?", pal.Bold(strings.Join(targets, ", "))))
-	if err != nil {
-		return err
-	}
-	if !ok {
-		_, err := fmt.Fprintln(a.out, "Aborted.")
+	if err := enforceAnswer(a, ok, err); err != nil {
 		return err
 	}
 

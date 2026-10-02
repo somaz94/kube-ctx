@@ -243,7 +243,7 @@ const (
 	// ExitUnhealthy is doctor's "the clusters answered, and some are sick", and
 	// expiry's "something is due, or a context could not be read".
 	ExitUnhealthy = 2
-	// ExitAborted is the user declining a guard confirmation.
+	// ExitAborted is the user declining a confirmation or closing the picker.
 	// 130 is the shell's convention for a command ended by the user.
 	ExitAborted = 130
 )

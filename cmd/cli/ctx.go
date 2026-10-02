@@ -55,7 +55,9 @@ func runCtx(a *app, args []string, back int) error {
 	target, err := resolveContextArg(a, cfg, args, back)
 	switch {
 	case errors.Is(err, picker.ErrAborted):
-		return nil // the user changed their mind; nothing to report
+		// Backing out is a decline, or "kctx && kubectl ..." runs against the
+		// context that was already current.
+		return &exitError{code: ExitAborted}
 	case errors.Is(err, errPickerUnavailable):
 		// No terminal to prompt on: print the list, the way kubectx does when
 		// it cannot go interactive.
@@ -149,7 +151,7 @@ func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
 // bypassed by "kctx exec prod -- kubectl delete ...".
 func requireGuardConfirmation(a *app, target string) error {
 	ok, err := confirmGuard(a, target)
-	return enforceGuard(a, ok, err)
+	return enforceAnswer(a, ok, err)
 }
 
 // requireNamespaceGuardConfirmation runs the same prompt for a namespace rule,
@@ -161,11 +163,11 @@ func requireGuardConfirmation(a *app, target string) error {
 // own default have been reconciled.
 func requireNamespaceGuardConfirmation(a *app, target, namespace string) error {
 	ok, err := confirmNamespaceGuard(a, target, namespace)
-	return enforceGuard(a, ok, err)
+	return enforceAnswer(a, ok, err)
 }
 
-// enforceGuard turns a confirmation answer into the command's outcome.
-func enforceGuard(a *app, ok bool, err error) error {
+// enforceAnswer turns a confirmation answer into the command's outcome.
+func enforceAnswer(a *app, ok bool, err error) error {
 	if err != nil {
 		return err
 	}
