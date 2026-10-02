@@ -1,6 +1,9 @@
 package picker
 
-import "unicode/utf8"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 // KeyType classifies one decoded keystroke.
 type KeyType int
@@ -88,16 +91,19 @@ func DecodeKey(buf []byte) (Key, int) {
 		return Key{Type: KeyIgnore}, 1
 	}
 
+	if !utf8.FullRune(buf) {
+		// A multi-byte rune split across reads: wait for the rest.
+		return Key{Type: KeyIgnore}, 0
+	}
 	r, size := utf8.DecodeRune(buf)
 	if r == utf8.RuneError && size <= 1 {
-		// Either an invalid byte or a multi-byte rune split across reads.
-		if len(buf) < utf8.UTFMax {
-			return Key{Type: KeyIgnore}, 0
-		}
 		return Key{Type: KeyIgnore}, 1
 	}
 	return Key{Type: KeyRune, Rune: r}, size
 }
+
+// maxCSIParams caps how many parameter bytes a stray "ESC [" can swallow.
+const maxCSIParams = 16
 
 // decodeEscape handles ESC-prefixed sequences: arrows, page keys, and a bare
 // ESC meaning "abort".
@@ -107,29 +113,59 @@ func decodeEscape(buf []byte) (Key, int) {
 		// normally arrive in one read, so an ESC on its own is the Escape key.
 		return Key{Type: KeyEscape}, 1
 	}
-	if buf[1] != keyBracket {
-		return Key{Type: KeyIgnore}, 2
+	// ESC O is SS3 (F1-F4, application-mode arrows), with CSI's byte classes.
+	if buf[1] == keyBracket || buf[1] == 'O' {
+		return decodeCSI(buf)
 	}
-	if len(buf) < 3 {
-		return Key{Type: KeyIgnore}, 0
-	}
+	return Key{Type: KeyIgnore}, 2
+}
 
-	switch buf[2] {
-	case 'A':
-		return Key{Type: KeyUp}, 3
-	case 'B':
-		return Key{Type: KeyDown}, 3
-	case 'C', 'D':
-		return Key{Type: KeyIgnore}, 3
-	case '5', '6':
-		// Page Up / Page Down arrive as ESC [ 5 ~ and ESC [ 6 ~.
-		if len(buf) < 4 {
-			return Key{Type: KeyIgnore}, 0
+// decodeCSI consumes an ESC [ or ESC O sequence through its final byte, so the
+// parameters of a key the picker ignores (Delete is ESC [ 3 ~) never reach the
+// query. A modifier keeps the key's meaning: Ctrl-Up still moves up.
+func decodeCSI(buf []byte) (Key, int) {
+	for i := 2; i < len(buf); i++ {
+		b := buf[i]
+		if b >= 0x40 && b <= 0x7e {
+			if b == '~' {
+				return Key{Type: pageKey(string(buf[2:i]))}, i + 1
+			}
+			return Key{Type: arrowKey(b)}, i + 1
 		}
-		if buf[2] == '5' {
-			return Key{Type: KeyPageUp}, 4
+		if b < 0x20 || b > 0x3f {
+			// Not a control sequence after all: drop what was read of it and
+			// decode this byte on its own.
+			return Key{Type: KeyIgnore}, i
 		}
-		return Key{Type: KeyPageDown}, 4
 	}
-	return Key{Type: KeyIgnore}, 3
+	if len(buf)-2 > maxCSIParams {
+		return Key{Type: KeyIgnore}, len(buf)
+	}
+	return Key{Type: KeyIgnore}, 0
+}
+
+// arrowKey maps the final byte of an arrow sequence; left and right are unused.
+func arrowKey(final byte) KeyType {
+	switch final {
+	case 'A':
+		return KeyUp
+	case 'B':
+		return KeyDown
+	}
+	return KeyIgnore
+}
+
+// pageKey maps the key number of an ESC [ n ~ sequence, ignoring any modifier
+// after it.
+func pageKey(params string) KeyType {
+	if i := strings.IndexByte(params, ';'); i >= 0 {
+		params = params[:i]
+	}
+	switch params {
+	case "5":
+		return KeyPageUp
+	case "6":
+		return KeyPageDown
+	}
+	return KeyIgnore
 }

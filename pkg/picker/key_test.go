@@ -34,6 +34,21 @@ func TestDecodeKey(t *testing.T) {
 		{"lone esc aborts", "\x1b", KeyEscape, 0, 1},
 		{"incomplete csi waits", "\x1b[", KeyIgnore, 0, 0},
 		{"incomplete page key waits", "\x1b[5", KeyIgnore, 0, 0},
+		// A key the picker ignores is still consumed through its final byte, or
+		// its parameters are typed into the query.
+		{"delete key", "\x1b[3~", KeyIgnore, 0, 4},
+		{"f5", "\x1b[15~", KeyIgnore, 0, 5},
+		{"ctrl-up moves up", "\x1b[1;5A", KeyUp, 0, 6},
+		{"ctrl-page-up pages up", "\x1b[5;5~", KeyPageUp, 0, 6},
+		{"incomplete modified key waits", "\x1b[1;5", KeyIgnore, 0, 0},
+		{"malformed csi drops the introducer", "\x1b[\r", KeyIgnore, 0, 2},
+		{"runaway csi is dropped", "\x1b[11111111111111111111", KeyIgnore, 0, 22},
+		{"ss3 f1", "\x1bOP", KeyIgnore, 0, 3},
+		{"ss3 arrow up", "\x1bOA", KeyUp, 0, 3},
+		{"incomplete ss3 waits", "\x1bO", KeyIgnore, 0, 0},
+		{"stray ss3 introducer keeps the next key", "\x1bO\r", KeyIgnore, 0, 2},
+		{"ss3 with a modifier", "\x1bO5A", KeyUp, 0, 4},
+		{"invalid byte is skipped at once", "\xffa\r", KeyIgnore, 0, 1},
 	}
 
 	for _, tt := range tests {
@@ -59,7 +74,7 @@ func TestDecodeKeySplitRune(t *testing.T) {
 		t.Errorf("consumed %d bytes on a split rune, want 0", n)
 	}
 
-	// An invalid byte in a full-width buffer is skipped rather than stalling.
+	// An invalid byte is skipped rather than stalling.
 	invalid := []byte{0xff, 'a', 'b', 'c', 'd'}
 	key, n := DecodeKey(invalid)
 	if n != 1 || key.Type != KeyIgnore {
