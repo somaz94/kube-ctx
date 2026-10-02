@@ -28,6 +28,9 @@ const (
 	penaltyGapMax    = 25
 )
 
+// saturatedGap is the gap from which the penalty stops growing.
+const saturatedGap = 1 + (penaltyGapMax-gapStart+gapExtension-1)/gapExtension
+
 // boundaryChars separate words in the names this picker deals with: context
 // names, namespaces, cluster ARNs.
 const boundaryChars = "-_./: "
@@ -75,14 +78,14 @@ func Score(query, target string) (int, []int, bool) {
 	}
 
 	for i := range q {
-		// bestVal is the best predecessor alignment seen strictly left of the
-		// current position. Ties keep the rightmost candidate, which is also
-		// the one with the smallest gap to close.
-		bestVal, bestAt := noMatch, -1
+		// A nearer predecessor pays less gap penalty, so the top scorer is not
+		// always best. Past saturatedGap the penalty is flat: keep a running best
+		// there and compare only the nearer ones.
+		farVal, farAt := noMatch, -1
 
 		for j := range t {
-			if j > 0 && i > 0 && prev[j-1] > noMatch && (bestAt < 0 || prev[j-1] >= bestVal) {
-				bestVal, bestAt = prev[j-1], j-1
+			if k := j - saturatedGap - 1; i > 0 && k >= 0 && prev[k] > noMatch && (farAt < 0 || prev[k] >= farVal) {
+				farVal, farAt = prev[k], k
 			}
 
 			cur[j] = noMatch
@@ -95,17 +98,24 @@ func Score(query, target string) (int, []int, bool) {
 				cur[j] = scoreMatch + charBonus(t, j)
 				continue
 			}
+
+			best, bestAt := noMatch, -1
+			if farAt >= 0 {
+				best, bestAt = farVal-penaltyGapMax, farAt
+			}
+			// Ties go to the rightmost candidate, the one with the smallest gap.
+			for k := max(0, j-saturatedGap); k < j; k++ {
+				if prev[k] == noMatch {
+					continue
+				}
+				if s := prev[k] + transition(j-k-1); s >= best {
+					best, bestAt = s, k
+				}
+			}
 			if bestAt < 0 {
 				continue // nowhere for the previous character to have matched
 			}
-
-			score := bestVal + scoreMatch + charBonus(t, j)
-			if bestAt == j-1 {
-				score += bonusConsecutive
-			} else if gap := j - bestAt - 1; gap > 0 {
-				score -= min(gapStart+(gap-1)*gapExtension, penaltyGapMax)
-			}
-			cur[j] = score
+			cur[j] = best + scoreMatch + charBonus(t, j)
 			parent[i][j] = bestAt
 		}
 		prev, cur = cur, prev
@@ -130,6 +140,14 @@ func Score(query, target string) (int, []int, bool) {
 		at = parent[i][at]
 	}
 	return best, positions, true
+}
+
+// transition is what joining two matched characters gap runes apart earns.
+func transition(gap int) int {
+	if gap == 0 {
+		return bonusConsecutive
+	}
+	return -min(gapStart+(gap-1)*gapExtension, penaltyGapMax)
 }
 
 // charBonus rewards matches that land at a word boundary or a camelCase hump,
