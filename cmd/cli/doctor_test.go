@@ -151,6 +151,11 @@ func TestRoundDuration(t *testing.T) {
 		{3 * time.Hour, "3h"},
 		{119*time.Minute + 59*time.Second, "2h"},
 		{72 * time.Hour, "3d"},
+		// Rounding up across a unit boundary lands in the next unit.
+		{59*time.Minute + 40*time.Second, "1h"},
+		{59*time.Minute + 20*time.Second, "59m"},
+		{47*time.Hour + 45*time.Minute, "2d"},
+		{47*time.Hour + 20*time.Minute, "47h"},
 	}
 	for _, tt := range tests {
 		if got := roundDuration(tt.in); got != tt.want {

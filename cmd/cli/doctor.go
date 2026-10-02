@@ -166,14 +166,17 @@ func detail(pal render.Palette, r probe.Result) string {
 // roundDuration renders a duration at a granularity a human cares about.
 //
 // It rounds rather than truncates: a credential with 1h59m59s left reads as
-// "2h", not the "1h" a truncating conversion would report.
+// "2h", not the "1h" a truncating conversion would report. The unit is picked
+// from the rounded value, or 47h45m would read "48h" and 59m40s "60m".
 func roundDuration(d time.Duration) string {
+	minutes := int(math.Round(d.Minutes()))
+	hours := int(math.Round(d.Hours()))
 	switch {
-	case d >= 48*time.Hour:
+	case hours >= 48:
 		return fmt.Sprintf("%dd", int(math.Round(d.Hours()/24)))
-	case d >= time.Hour:
-		return fmt.Sprintf("%dh", int(math.Round(d.Hours())))
+	case minutes >= 60:
+		return fmt.Sprintf("%dh", hours)
 	default:
-		return fmt.Sprintf("%dm", int(math.Round(d.Minutes())))
+		return fmt.Sprintf("%dm", minutes)
 	}
 }
