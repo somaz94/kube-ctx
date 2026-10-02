@@ -20,9 +20,11 @@ CYAN='\033[36m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-info()  { echo -e "${CYAN}▶ $*${RESET}"; }
-ok()    { echo -e "${GREEN}✓ $*${RESET}"; }
-fail()  { echo -e "${RED}✗ $*${RESET}"; exit 1; }
+# %b for the color codes only: a message is printed as typed, so an INSTALL_DIR
+# holding "\c" cannot cut the line short the way echo -e did.
+info()  { printf '%b▶ %s%b\n' "$CYAN" "$*" "$RESET"; }
+ok()    { printf '%b✓ %s%b\n' "$GREEN" "$*" "$RESET"; }
+fail()  { printf '%b✗ %s%b\n' "$RED" "$*" "$RESET"; exit 1; }
 
 detect_platform() {
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -52,7 +54,7 @@ get_latest_version() {
 }
 
 main() {
-  echo -e "${BOLD}${BINARY} installer${RESET}"
+  printf '%b%s installer%b\n' "$BOLD" "$BINARY" "$RESET"
   echo ""
 
   detect_platform
@@ -87,7 +89,7 @@ main() {
 
   ok "${BINARY} v${VERSION} installed successfully!"
   echo ""
-  echo -e "  Run '${CYAN}${BINARY} --help${RESET}' to get started."
+  printf "  Run '%b%s --help%b' to get started.\n" "$CYAN" "$BINARY" "$RESET"
 }
 
 main
