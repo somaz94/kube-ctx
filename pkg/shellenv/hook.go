@@ -167,8 +167,8 @@ function %[1]s
 end
 
 # Applies directory bindings (kctx bind) when the working directory changes.
-# fish has no chpwd hook; watching $PWD is the documented equivalent, and it
-# fires once for the directory the shell starts in as well.
+# fish has no chpwd hook; watching $PWD is the documented equivalent. It only
+# fires on a change, so the call below covers the directory the shell starts in.
 function __kctx_chpwd --on-variable PWD
     %[1]s bind --apply
 end
