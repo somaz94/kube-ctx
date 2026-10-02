@@ -31,10 +31,10 @@ func newNsCmd(a *app) *cobra.Command {
 		Aliases: []string{"n", "namespace"},
 		Short:   "Switch the namespace of the current context",
 		Long: "Switch the default namespace of the current context.\n\n" +
-			"With no argument the namespaces are listed; \"-\" or \"-N\" restores the\n" +
-			"previous (or Nth previous) namespace of this context. The list comes from\n" +
-			"the API server and is cached, so it still works when the cluster is\n" +
-			"briefly unreachable.",
+			"With no argument an interactive picker opens (without a terminal the\n" +
+			"namespaces are listed); \"-\" or \"-N\" restores the previous (or Nth\n" +
+			"previous) namespace of this context. The list comes from the API server\n" +
+			"and is cached, so it still works when the cluster is briefly unreachable.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNs(a, args, back, refresh, timeout)
