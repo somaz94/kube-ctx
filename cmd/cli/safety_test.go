@@ -901,6 +901,9 @@ func TestRestoreCommandQuotesAndKeepsACustomLabel(t *testing.T) {
 	if got := restoreCommand("prod", "", guard.Verdict{Level: config.LevelDanger, Label: "DANGER"}); got != "kctx guard add prod" {
 		t.Errorf("a default label must not be spelled out: %q", got)
 	}
+	if got := restoreCommand("-odd", "", guard.Verdict{Level: config.LevelDanger, Confirm: true}); got != "kctx guard add --confirm -- -odd" {
+		t.Errorf("a name starting with - must follow --: %q", got)
+	}
 }
 
 func TestShellWord(t *testing.T) {
@@ -909,6 +912,8 @@ func TestShellWord(t *testing.T) {
 		"gke_proj_zone_name": "gke_proj_zone_name",
 		"it's":               `'it'\''s'`,
 		"a b":                "'a b'",
+		"=foo":               "'=foo'",
+		"%self":              "'%self'",
 		"":                   "''",
 	}
 	for in, want := range tests {

@@ -125,29 +125,33 @@ func describeVerdict(v guard.Verdict) string {
 // it adds is prepended, so v has to be at least the verdict name has now, or
 // restoring one axis would lower the other.
 func restoreCommand(name, namespace string, v guard.Verdict) string {
-	parts := []string{"kctx guard add", shellWord(name)}
+	var flags []string
 	if namespace != "" {
-		parts = append(parts, "-n", shellWord(namespace))
+		flags = append(flags, "-n", shellWord(namespace))
 	}
 	if v.Level != config.LevelDanger {
-		parts = append(parts, "--level", string(v.Level))
+		flags = append(flags, "--level", string(v.Level))
 	}
 	if v.Confirm {
-		parts = append(parts, "--confirm")
+		flags = append(flags, "--confirm")
 	}
 	if v.Label != "" && v.Label != strings.ToUpper(string(v.Level)) {
-		parts = append(parts, "--label", shellWord(v.Label))
+		flags = append(flags, "--label", shellWord(v.Label))
 	}
-	return strings.Join(parts, " ")
+	if strings.HasPrefix(name, "-") {
+		// Quoting does not stop a leading "-" parsing as a flag; "--" does.
+		return strings.Join(append(append([]string{"kctx guard add"}, flags...), "--", shellWord(name)), " ")
+	}
+	return strings.Join(append([]string{"kctx guard add", shellWord(name)}, flags...), " ")
 }
 
 // shellWord single-quotes s unless every character is safe bare, which is the
 // common case for context names. The quoting reads the same in bash, zsh and
-// fish.
+// fish. "=" and "%" are not safe: zsh expands a leading "=cmd", fish "%self".
 func shellWord(s string) string {
 	safe := s != "" && !strings.ContainsFunc(s, func(r rune) bool {
 		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
-			strings.ContainsRune("-_./:@%+=,", r))
+			strings.ContainsRune("-_./:@+,", r))
 	})
 	if safe {
 		return s
