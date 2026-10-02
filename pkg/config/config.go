@@ -39,8 +39,9 @@ const header = `# kube-ctx configuration.
 #
 # guards classify a context by name; the first matching rule wins. By default
 # they only label and colorize — switching is never blocked. Set confirm: true
-# on a rule to require retyping the exact context name before switching to a
-# context it matches (kctx -y skips the prompt, for scripts).
+# on a rule to require retyping the context's name before any kctx command
+# reaches a context it matches — kctx ctx, exec, shell and export alike
+# (kctx -y skips the prompt, for scripts).
 #
 # A rule carries exactly one matcher: match (regex), contexts (exact names),
 # prefix, or suffix. Manage them with kctx guard.
@@ -49,7 +50,8 @@ const header = `# kube-ctx configuration.
 # contexts it matches, instead of the contexts themselves — so kube-system in
 # production can require confirming while switching to production does not.
 # The context matcher may then be left out, meaning every context. Namespace
-# rules gate kctx ns, kctx exec -n and kctx shell -n alike.
+# rules gate kctx ctx, kctx ns, kctx exec and kctx shell alike, on the
+# namespace each would land in, and ask for that namespace's name instead.
 #
 # aliases are accepted anywhere a context name is; manage them with kctx alias.
 #

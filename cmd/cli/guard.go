@@ -63,9 +63,10 @@ func newGuardAddCmd(a *app) *cobra.Command {
 			"the four forms may be used.\n\n" +
 			"--namespace turns the rule around: it then classifies those namespaces\n" +
 			"inside the contexts it matches, instead of the contexts themselves, and\n" +
-			"gates kctx ns, kctx exec -n and kctx shell -n. Give no context matcher\n" +
-			"alongside it to mean every context. Guarding both a cluster and a\n" +
-			"namespace inside it takes two rules, since one rule has one level.\n\n" +
+			"gates kctx ctx, kctx ns, kctx exec and kctx shell on the namespace each\n" +
+			"would land in. Give no context matcher alongside it to mean every\n" +
+			"context. Guarding both a cluster and a namespace inside it takes two\n" +
+			"rules, since one rule has one level.\n\n" +
 			"A new rule is prepended, so it wins over the built-in name patterns.",
 		Example: "  kctx guard add cluster-7 --confirm\n" +
 			"  kctx guard add --suffix -live --label PROD\n" +
