@@ -332,8 +332,7 @@ func TestUnknownCatchesARefusedSecretsList(t *testing.T) {
 	}
 }
 
-// The exit status is the whole contract, and both bugs found in review were a
-// single wrong cell in this table. Enumerated rather than sampled so a future
+// The exit status is the whole contract. Enumerated rather than sampled so a
 // change to Expiring or Unknown has to face every combination at once.
 func TestExitStatusMatrix(t *testing.T) {
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

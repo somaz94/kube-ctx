@@ -98,8 +98,8 @@ var ansiPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // VisibleWidth returns the printed width of s, ignoring color escapes. Wide
 // and fullwidth characters take two columns and combining marks none, as a
-// terminal draws them; a rune count misaligned every column after a Korean
-// or Japanese context name.
+// terminal draws them; a rune count would misalign every column after a
+// Korean or Japanese context name.
 func VisibleWidth(s string) int {
 	n := 0
 	for _, r := range ansiPattern.ReplaceAllString(s, "") {

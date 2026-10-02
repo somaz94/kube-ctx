@@ -40,8 +40,8 @@ const (
 	SourceLive Source = iota
 	// SourceCacheFresh means the cache was within its TTL and no call was made.
 	SourceCacheFresh
-	// SourceCacheStale means the API server could not be reached and an expired
-	// cache was used instead.
+	// SourceCacheStale means the live call failed and the cache was used
+	// instead, whatever its age: Options.Refresh skips even a fresh one.
 	SourceCacheStale
 )
 

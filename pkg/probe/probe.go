@@ -189,12 +189,11 @@ func (p *Prober) probeOne(ctx context.Context, cfg *clientcmdapi.Config, name st
 	}
 
 	if result.Server == "" {
-		return result // nothing to contact
+		return result
 	}
 
-	// Prober is exported, so &Prober{} is a legal construction. Every other
-	// field defaults itself in Run; this one cannot, and a library should
-	// report that rather than nil-panic inside a goroutine.
+	// &Prober{} is legal and, unlike every other field, RestConfig has no
+	// default: report it rather than nil-panic inside a goroutine.
 	if p.RestConfig == nil {
 		result.Issues = append(result.Issues, "prober has no RestConfig function")
 		return result
@@ -237,7 +236,7 @@ func LiveVersion(ctx context.Context, rc *rest.Config) (string, error) {
 		return "", err
 	}
 	// Declared inline rather than as apimachinery's version.Info: gitVersion is
-	// the only field used, and "version" is already a name in this package.
+	// the only field used, and Run and probeOne already use "version" as a local.
 	var info struct {
 		GitVersion string `json:"gitVersion"`
 	}

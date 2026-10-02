@@ -115,9 +115,8 @@ type Result struct {
 	Items   []Item `json:"items"`
 	// Err is the context failing outright — unreachable, or no credential.
 	Err string `json:"error,omitempty"`
-	// Skipped is what could not be read. Not uniformly tolerable: a skip
-	// marked Blind means nothing came back at all, which Unknown treats the
-	// way it treats an unreachable cluster, while the rest cost a column.
+	// Skipped is what could not be read. Only a Blind skip makes Unknown true;
+	// the rest cost a column.
 	Skipped []Skip `json:"skipped,omitempty"`
 }
 
@@ -275,8 +274,7 @@ func Expiring(results []Result) bool {
 // "kctx expiry || notify-oncall" silent for the one case — every cluster
 // unreachable — where it most needs to fire.
 //
-// A blind skip counts the same as an outright failure. The two look different
-// and mean the same thing: nothing came back.
+// A Blind skip counts as an outright failure: either way, nothing came back.
 func Unknown(results []Result) bool {
 	for _, r := range results {
 		if r.Err != "" {

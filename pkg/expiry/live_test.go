@@ -245,7 +245,7 @@ func TestARefusedSecretsListReachesTheExitStatus(t *testing.T) {
 	if !Unknown([]Result{{Context: "a", Skipped: []Skip{skip}}}) {
 		t.Fatal("what Live actually produces did not register as unknown; the command would exit 0")
 	}
-	// The reason is carried for the operator and must stay out of the decision.
+	// The reason still travels, for the operator.
 	if skip.Reason == "" {
 		t.Error("the skip carries no reason")
 	}
