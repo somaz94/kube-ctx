@@ -58,8 +58,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends zsh fish
 
+      # -count=1: setup-go restores the test cache too, and a result replayed
+      # from it kept the zsh and fish subtests skipped after both were installed.
       - name: Run tests with coverage
-        run: go test ./... -v -race -cover -coverprofile=coverage.out
+        run: go test ./... -v -race -count=1 -cover -coverprofile=coverage.out
 
       - name: Display coverage summary
         run: go tool cover -func=coverage.out
