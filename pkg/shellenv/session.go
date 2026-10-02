@@ -34,6 +34,8 @@ const (
 	DefaultMaxAge = 7 * 24 * time.Hour
 	// filePerm keeps session kubeconfigs owner-only; they carry credentials.
 	filePerm = 0o600
+	// idBytes is the random length of a session ID, hex-encoded in its name.
+	idBytes = 6
 )
 
 // Environment variables a kube-ctx-managed shell carries.
@@ -188,14 +190,14 @@ func List() ([]Info, error) {
 	current := os.Getenv(EnvShellID)
 	out := make([]Info, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+		id, ok := sessionID(entry)
+		if !ok {
 			continue
 		}
 		stat, err := entry.Info()
 		if err != nil {
 			continue // it went away while we were looking; that is fine
 		}
-		id := strings.TrimSuffix(entry.Name(), ".yaml")
 		path := filepath.Join(dir, entry.Name())
 
 		info := Info{ID: id, Path: path, LastUsed: stat.ModTime(), Current: id == current}
@@ -249,14 +251,31 @@ func GC(maxAge time.Duration) error {
 
 	cutoff := time.Now().Add(-maxAge)
 	for _, entry := range entries {
+		id, ok := sessionID(entry)
+		if !ok {
+			continue
+		}
 		info, err := entry.Info()
 		if err != nil || info.ModTime().After(cutoff) {
 			continue
 		}
-		id := strings.TrimSuffix(entry.Name(), ".yaml")
 		_ = (&Session{ID: id, Path: filepath.Join(dir, entry.Name())}).Remove()
 	}
 	return nil
+}
+
+// sessionID returns the ID a sessions-dir entry is named for, or false when it
+// is not a session copy. GC removes history by globbing on the ID, so a stray
+// ".yaml" read as ID "" would take every session's history with it.
+func sessionID(entry os.DirEntry) (string, bool) {
+	id, ok := strings.CutSuffix(entry.Name(), ".yaml")
+	if !ok || entry.IsDir() || len(id) != 2*idBytes {
+		return "", false
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return "", false
+	}
+	return id, true
 }
 
 // Active reports whether the current process is running inside a managed shell.
@@ -280,7 +299,7 @@ func sessionsDir() (string, error) {
 
 // newID returns a random session identifier.
 func newID() (string, error) {
-	buf := make([]byte, 6)
+	buf := make([]byte, idBytes)
 	if _, err := rand.Read(buf); err != nil {
 		return "", fmt.Errorf("generate session id: %w", err)
 	}

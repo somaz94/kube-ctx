@@ -191,6 +191,53 @@ func TestGCRemovesOnlyStaleSessions(t *testing.T) {
 	}
 }
 
+// Anything else in the sessions dir is not ours to sweep, and the sweep
+// derives a history glob from the name: a stray ".yaml" became "history-*".
+func TestGCLeavesForeignEntriesAndLiveHistoryAlone(t *testing.T) {
+	sessions := isolate(t)
+	cfg := testutil.Config(testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
+	live, err := New(cfg, "dev")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	history := filepath.Join(filepath.Dir(sessions), "history-"+live.ID)
+	if err := os.WriteFile(history, []byte("prod\n"), 0o600); err != nil {
+		t.Fatalf("write history: %v", err)
+	}
+
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	var foreign []string
+	for _, name := range []string{".yaml", "a.yaml", "notes.txt"} {
+		path := filepath.Join(sessions, name)
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatalf("chtimes: %v", err)
+		}
+		foreign = append(foreign, path)
+	}
+
+	if err := GC(DefaultMaxAge); err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+	if _, err := os.Stat(history); err != nil {
+		t.Errorf("a live session's history was swept: %v", err)
+	}
+	for _, path := range foreign {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%s is not a session copy and was removed: %v", filepath.Base(path), err)
+		}
+	}
+	list, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != live.ID {
+		t.Errorf("List = %+v, want only the live session", list)
+	}
+}
+
 func TestGCWithoutSessionDir(t *testing.T) {
 	isolate(t)
 	if err := GC(time.Hour); err != nil {

@@ -112,8 +112,9 @@ func TestSessionsCleanAllKeepsTheCurrentOne(t *testing.T) {
 	mine := startSession(t, h, "prod")
 	t.Setenv(EnvShellID, strings.TrimSuffix(filepath.Base(mine), ".yaml"))
 
-	// A second, abandoned copy belonging to no live shell.
-	other := filepath.Join(filepath.Dir(mine), "abandoned.yaml")
+	// A second, abandoned copy belonging to no live shell, named the way New
+	// names one: anything else in the directory is not a session.
+	other := filepath.Join(filepath.Dir(mine), "0123456789ab.yaml")
 	if err := os.WriteFile(other, []byte("apiVersion: v1\nkind: Config\n"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
