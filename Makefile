@@ -24,9 +24,7 @@ test-unit: ## Run unit tests with coverage
 
 ## E2E
 
-# The suite needs a cluster that answers and a kubeconfig kubectl reads back.
-# It copies the current context into a throwaway workspace, so it never writes
-# to the caller's own kubeconfig.
+# Runs on a throwaway copy of the current context, never your kubeconfig.
 e2e: build ## Run the end-to-end suite against the current cluster
 	./scripts/e2e.sh
 

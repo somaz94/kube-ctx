@@ -26,6 +26,7 @@ set -euo pipefail
 #   E2E_CONTEXT     context to copy (default: the current one)
 #   KCTX_E2E_KEEP   set to keep the workspace directory for debugging
 #   NO_COLOR        set to disable color
+#   E2E_ALLOW_DANGER set to run against a context the default rules badge DANGER
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 KCTX_BIN="${KCTX:-$REPO_ROOT/bin/kctx}"
@@ -542,9 +543,8 @@ check_bare_switch() {
   assert_eq "$LIVE" "$(current_context)" "... without switching"
 }
 
-# The expiry sweep against a real API server. The unit suite stubs the cluster
-# read entirely, so this is the only place the field selector, the secret
-# decode and the PEM parse are exercised against something that could disagree.
+# The unit suite stubs the cluster read entirely, so this is the only place the
+# field selector, the secret decode and the PEM parse meet a real API server.
 check_expiry() {
   section "Certificate expiry, read from a real cluster"
 
@@ -785,8 +785,7 @@ check_sessions() {
   local before after
   before="$(session_count)"
   if [ "$before" -gt 0 ]; then
-    # Age is time since last use, and a copy nothing has touched in a month is
-    # abandoned by any measure.
+    # Age is time since last use; backdated to 2020, every copy is past DefaultMaxAge.
     find "$XDG_STATE_HOME/kube-ctx/shells" -name '*.yaml' -exec touch -t 202001010000 {} +
     capture kctx sessions --clean
     assert_status 0 "sessions --clean removes the abandoned copies"
@@ -833,8 +832,7 @@ check_fanout() {
   assert_status 0 "a single-context fan-out succeeds"
   assert_contains "$LIVE" "the child ran against the context it was given"
 
-  # The point of exec: nothing switches. A "for" loop over kubectl config
-  # use-context is exactly what this replaces.
+  # A "for" loop over kubectl config use-context is exactly what this replaces.
   assert_eq "$LIVE" "$(current_context)" "the fan-out changed no context"
 
   # Each child gets a copy of the merged kubeconfig — every cluster, token and
