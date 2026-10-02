@@ -139,7 +139,12 @@ without asking — they are the release pipeline.
   none. `kctx guard` writes them, prepending so a new rule beats the defaults.
   `confirm` gates every route to a cluster — `ctx`, `shell`, `exec` and
   `export` all call `requireGuardConfirmation`; covering only `ctx` left
-  `kctx exec prod -- ...` walking straight past the guard.
+  `kctx exec prod -- ...` walking straight past the guard. `rename` carries
+  `contexts` entries to the new name, or renaming production would drop its
+  confirm. The new name is written to config.yaml before the kubeconfig and the
+  old one removed after, so a failed write in between leaves the context guarded
+  under either name. Pattern rules cannot follow a rename, so a weakened
+  verdict is warned about, not refused.
 - **The second guard axis** (`Guard.Namespaces`) — a rule listing namespaces
   classifies those *inside* the contexts it matches and stops classifying the
   context, because one rule has one `level` and the two verdicts differ: a

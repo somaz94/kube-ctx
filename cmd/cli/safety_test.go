@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/somaz94/kube-ctx/internal/testutil"
 	"github.com/somaz94/kube-ctx/pkg/config"
+	"github.com/somaz94/kube-ctx/pkg/guard"
 	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
@@ -712,5 +715,217 @@ func TestBothGuardsPromptSeparatelyOnASwitch(t *testing.T) {
 	}
 	if !strings.Contains(out, `Type "kube-system" to continue`) {
 		t.Errorf("the namespace prompt did not run: %q", out)
+	}
+}
+
+// guardExactConfig guards "prod" by name rather than by pattern.
+const guardExactConfig = "guards:\n  - contexts: [prod]\n    level: danger\n    confirm: true\n"
+
+// A guard naming the context exactly would otherwise stay behind on the old
+// name, and the renamed production context would switch without a prompt.
+func TestRenameCarriesAnExactNameGuard(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardExactConfig)
+
+	if err := h.run("rename", "prod", "live"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if !strings.Contains(h.stdout(), "Guard rules naming prod now name live") {
+		t.Errorf("stdout = %q, want the carried guard reported", h.stdout())
+	}
+	if strings.Contains(h.stderr(), "warning") {
+		t.Errorf("stderr = %q; a carried guard is not a lost one", h.stderr())
+	}
+	userCfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got := userCfg.Guards[0].Contexts; len(got) != 1 || got[0] != "live" {
+		t.Errorf("guard contexts = %v, want [live]", got)
+	}
+
+	h.stdin("no\n")
+	if code := ExitCode(h.run("ctx", "live")); code != ExitAborted {
+		t.Errorf("ctx live: ExitCode = %d, want %d; the guard did not follow the rename", code, ExitAborted)
+	}
+}
+
+func TestRenameThatFailsToSaveLeavesTheContextGuarded(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardExactConfig)
+	// A state dir that is a file makes the kubeconfig backup, and so the
+	// kubeconfig write, fail after the guards have been written once.
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_STATE_HOME", blocker)
+
+	if err := h.run("rename", "prod", "live"); err == nil {
+		t.Fatal("rename succeeded; the test did not make the write fail")
+	}
+	if _, ok := h.config().Contexts["prod"]; !ok {
+		t.Fatal("the kubeconfig changed despite the failed write")
+	}
+	userCfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	classifier, err := guard.New(userCfg.Guards)
+	if err != nil {
+		t.Fatalf("guard.New: %v", err)
+	}
+	if !classifier.Classify("prod").Confirm {
+		t.Errorf("guards = %+v; prod is no longer guarded after a failed rename", userCfg.Guards)
+	}
+	// Both names: the carry reached the file before the kubeconfig write.
+	if got := userCfg.Guards[0].Contexts; len(got) != 2 || got[1] != "live" {
+		t.Errorf("guard contexts = %v, want [prod live]", got)
+	}
+}
+
+// The other half of the ordering: guards that cannot be written stop the
+// rename before the kubeconfig changes, or the context would end up unguarded.
+func TestRenameStopsBeforeTheKubeconfigWhenGuardsCannotBeSaved(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file modes")
+	}
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardExactConfig)
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "kube-ctx", "config.yaml")
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := h.run("rename", "prod", "live"); err == nil {
+		t.Fatal("rename succeeded; the config write did not fail")
+	}
+	if _, ok := h.config().Contexts["prod"]; !ok {
+		t.Error("the kubeconfig was renamed although the guards could not follow")
+	}
+}
+
+func TestRenameCarriesTheGuardOfAnAliasedContext(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardExactConfig+"aliases:\n  p: prod\n")
+
+	if err := h.run("rename", "p", "live"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	userCfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got := userCfg.Guards[0].Contexts; len(got) != 1 || got[0] != "live" {
+		t.Errorf("guard contexts = %v, want [live]", got)
+	}
+}
+
+// With no config file the defaults are in effect, and a rename must not freeze
+// them into a file the user never asked for.
+func TestRenameWithoutAConfigFileWritesNone(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	if err := h.run("rename", "prod", "live"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if !strings.Contains(h.stderr(), "kctx guard add live\n") {
+		t.Errorf("stderr = %q, want the default pattern's loss reported", h.stderr())
+	}
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "kube-ctx", "config.yaml")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("stat config.yaml: %v; want it not created", err)
+	}
+}
+
+// The restore rule is prepended and wins first-match, so restoring only the
+// lost confirm at the old level would lower a context that is now danger.
+func TestRenameRestoreLineNeverLowersTheLevel(t *testing.T) {
+	h := newHarness(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}, {Name: "prod-a"}}})
+	writeUserConfig(t, "guards:\n"+
+		"  - suffix: -a\n    level: warn\n    confirm: true\n"+
+		"  - match: prod\n    level: danger\n")
+
+	if err := h.run("rename", "prod-a", "prod-b"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if !strings.Contains(h.stderr(), "kctx guard add prod-b --confirm\n") {
+		t.Errorf("stderr = %q, want a danger + confirm restore line", h.stderr())
+	}
+}
+
+func TestRestoreCommandQuotesAndKeepsACustomLabel(t *testing.T) {
+	got := restoreCommand("my ctx", "kube-system",
+		guard.Verdict{Level: config.LevelWarn, Confirm: true, Label: "PROD EU"})
+	want := "kctx guard add 'my ctx' -n kube-system --level warn --confirm --label 'PROD EU'"
+	if got != want {
+		t.Errorf("restoreCommand = %q\nwant           %q", got, want)
+	}
+	if got := restoreCommand("prod", "", guard.Verdict{Level: config.LevelDanger, Label: "DANGER"}); got != "kctx guard add prod" {
+		t.Errorf("a default label must not be spelled out: %q", got)
+	}
+}
+
+func TestShellWord(t *testing.T) {
+	tests := map[string]string{
+		"arn:aws:eks:ap-northeast-2:123456789012:cluster/prod": "arn:aws:eks:ap-northeast-2:123456789012:cluster/prod",
+		"gke_proj_zone_name": "gke_proj_zone_name",
+		"it's":               `'it'\''s'`,
+		"a b":                "'a b'",
+		"":                   "''",
+	}
+	for in, want := range tests {
+		if got := shellWord(in); got != want {
+			t.Errorf("shellWord(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRenameWarnsWhenAPatternGuardStopsMatching(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardConfirmConfig)
+
+	if err := h.run("rename", "prod", "live"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	for _, want := range []string{
+		`warning: prod was danger, confirm (rule "prod"); as live it is safe`,
+		"kctx guard add live --confirm",
+	} {
+		if !strings.Contains(h.stderr(), want) {
+			t.Errorf("stderr = %q, want %q", h.stderr(), want)
+		}
+	}
+	if _, ok := h.config().Contexts["live"]; !ok {
+		t.Error("the warning must not undo the rename")
+	}
+}
+
+func TestRenameWarnsWhenANamespaceGuardStopsMatching(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, "guards:\n  - prefix: prod\n    namespaces: [kube-system]\n    level: warn\n    confirm: true\n")
+
+	if err := h.run("rename", "prod", "live"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	for _, want := range []string{
+		"warning: kube-system in prod was warn, confirm",
+		"kctx guard add live -n kube-system --level warn --confirm",
+	} {
+		if !strings.Contains(h.stderr(), want) {
+			t.Errorf("stderr = %q, want %q", h.stderr(), want)
+		}
+	}
+}
+
+func TestRenameOfAnUnguardedContextSaysNothingAboutGuards(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	writeUserConfig(t, guardExactConfig)
+
+	if err := h.run("rename", "dev", "development"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if strings.Contains(h.stdout(), "Guard") || h.stderr() != "" {
+		t.Errorf("stdout = %q, stderr = %q", h.stdout(), h.stderr())
 	}
 }

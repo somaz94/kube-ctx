@@ -352,3 +352,60 @@ func TestNamespaceRuleRejectsAWhitespaceOnlyNamespace(t *testing.T) {
 		t.Fatalf("Validate = %v, want an empty-namespace error", err)
 	}
 }
+
+func TestWeakerThan(t *testing.T) {
+	danger := Verdict{Level: config.LevelDanger}
+	dangerConfirm := Verdict{Level: config.LevelDanger, Confirm: true}
+	warnConfirm := Verdict{Level: config.LevelWarn, Confirm: true}
+	safe := Verdict{Level: config.LevelSafe}
+
+	tests := []struct {
+		name     string
+		v, other Verdict
+		wantWeak bool
+	}{
+		{"lower level", safe, danger, true},
+		{"lost confirm", danger, dangerConfirm, true},
+		{"higher level but lost confirm", danger, warnConfirm, true},
+		{"same", dangerConfirm, dangerConfirm, false},
+		{"stronger", dangerConfirm, safe, false},
+		{"gained confirm at a lower level", warnConfirm, danger, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.v.WeakerThan(tt.other); got != tt.wantWeak {
+				t.Errorf("%+v.WeakerThan(%+v) = %v, want %v", tt.v, tt.other, got, tt.wantWeak)
+			}
+		})
+	}
+}
+
+func TestNamespacesListsEveryGuardedNamespaceOnce(t *testing.T) {
+	c, err := New([]config.Guard{
+		{Prefix: "prod-", Namespaces: []string{"kube-system", "istio-system"}, Level: config.LevelDanger},
+		{Namespaces: []string{"kube-system"}, Level: config.LevelWarn},
+		{Match: "prod", Level: config.LevelDanger},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := strings.Join(c.Namespaces(), ","); got != "istio-system,kube-system" {
+		t.Errorf("Namespaces() = %q", got)
+	}
+}
+
+func TestJoinGuardsAtLeastAsMuchAsBoth(t *testing.T) {
+	warnConfirm := Verdict{Level: config.LevelWarn, Confirm: true, Label: "STG"}
+	danger := Verdict{Level: config.LevelDanger, Label: "DANGER"}
+
+	got := warnConfirm.Join(danger)
+	if got.Level != config.LevelDanger || !got.Confirm || got.Label != "DANGER" {
+		t.Errorf("Join = %+v, want danger + confirm with the danger label", got)
+	}
+	if got.WeakerThan(warnConfirm) || got.WeakerThan(danger) {
+		t.Errorf("Join = %+v is weaker than one of its inputs", got)
+	}
+	if got := danger.Join(warnConfirm); got.Label != "DANGER" {
+		t.Errorf("Join kept label %q from the lower level", got.Label)
+	}
+}

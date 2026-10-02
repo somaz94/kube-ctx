@@ -79,6 +79,8 @@ kctx rename . prod-eks-apne2      # "." is the current context
 
 `current-context` follows the rename, so the kubeconfig never ends up pointing at a name that no longer exists. The kubeconfig is backed up first.
 
+Guard rules that name the context exactly (`contexts:`) move to the new name; otherwise renaming a production context would quietly drop its confirmation. A rule matching by pattern cannot follow, so when the new name ends up less guarded than the old one — a lower level, or no `confirm` — the rename warns and prints the `kctx guard add` line that restores it. Namespace rules are checked the same way. The rename itself still goes ahead, since renaming something out of production can be deliberate.
+
 <br/>
 
 ## kctx delete

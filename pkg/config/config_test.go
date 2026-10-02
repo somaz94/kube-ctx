@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -312,6 +313,60 @@ func TestRemoveGuard(t *testing.T) {
 	}
 	if len(cfg.Guards) != before-1 {
 		t.Errorf("got %d guards, want %d", len(cfg.Guards), before-1)
+	}
+}
+
+func TestCarryGuardsKeepsTheOldNameUntilDropped(t *testing.T) {
+	cfg := &Config{Guards: []Guard{
+		{Contexts: []string{"a", "prod", "b"}, Level: LevelDanger, Confirm: true},
+		{Contexts: []string{"prod"}, Namespaces: []string{"kube-system"}, Level: LevelDanger},
+		{Contexts: []string{"other"}, Level: LevelWarn},
+		{Match: "prod", Level: LevelDanger},
+	}}
+
+	if got := cfg.CarryGuards("prod", "live"); got != 2 {
+		t.Errorf("CarryGuards = %d, want 2", got)
+	}
+	if got := cfg.Guards[0].Contexts; !slices.Equal(got, []string{"a", "prod", "live", "b"}) {
+		t.Errorf("after carry: %v", got)
+	}
+
+	cfg.DropCarriedName("prod", "live")
+	if got := cfg.Guards[0].Contexts; !slices.Equal(got, []string{"a", "live", "b"}) {
+		t.Errorf("after drop: %v, want live in the old name's place", got)
+	}
+	if got := cfg.Guards[1].Contexts; !slices.Equal(got, []string{"live"}) {
+		t.Errorf("namespace rule: %v, want it carried too", got)
+	}
+	if got := cfg.Guards[2].Contexts; !slices.Equal(got, []string{"other"}) {
+		t.Errorf("unrelated rule changed: %v", got)
+	}
+	if cfg.Guards[3].Match != "prod" {
+		t.Errorf("pattern rule changed: %+v", cfg.Guards[3])
+	}
+}
+
+func TestCarryGuardsDoesNotDuplicateANameAlreadyListed(t *testing.T) {
+	cfg := &Config{Guards: []Guard{{Contexts: []string{"prod", "live"}, Level: LevelDanger}}}
+
+	if got := cfg.CarryGuards("prod", "live"); got != 1 {
+		t.Errorf("CarryGuards = %d, want 1", got)
+	}
+	cfg.DropCarriedName("prod", "live")
+	if got := cfg.Guards[0].Contexts; !slices.Equal(got, []string{"live"}) {
+		t.Errorf("got %v, want [live]", got)
+	}
+}
+
+func TestDropCarriedNameNeverEmptiesARule(t *testing.T) {
+	cfg := &Config{Guards: []Guard{{Contexts: []string{"prod"}, Level: LevelDanger}}}
+
+	// An empty contexts list is rejected by the classifier, and on a namespace
+	// rule it would silently mean every context.
+	cfg.DropCarriedName("prod", "live")
+	cfg.DropCarriedName("prod", "prod")
+	if got := cfg.Guards[0].Contexts; !slices.Equal(got, []string{"prod"}) {
+		t.Errorf("got %v, want the rule left alone", got)
 	}
 }
 

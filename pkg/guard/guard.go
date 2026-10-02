@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/somaz94/kube-ctx/pkg/config"
@@ -33,6 +34,33 @@ type Verdict struct {
 
 // Dangerous reports whether the context is classified as production.
 func (v Verdict) Dangerous() bool { return v.Level == config.LevelDanger }
+
+// WeakerThan reports whether v guards less than other: a lower level, or no
+// confirmation where other demanded one.
+func (v Verdict) WeakerThan(other Verdict) bool {
+	return levelRank(v.Level) < levelRank(other.Level) || (other.Confirm && !v.Confirm)
+}
+
+// Join returns a verdict that guards at least as much as both v and other.
+func (v Verdict) Join(other Verdict) Verdict {
+	if levelRank(other.Level) > levelRank(v.Level) {
+		v.Level, v.Label = other.Level, other.Label
+	}
+	v.Confirm = v.Confirm || other.Confirm
+	return v
+}
+
+// levelRank orders the levels from least to most guarded.
+func levelRank(level config.Level) int {
+	switch level {
+	case config.LevelDanger:
+		return 2
+	case config.LevelWarn:
+		return 1
+	default:
+		return 0
+	}
+}
 
 // Style maps the verdict onto the badge styles the picker understands.
 func (v Verdict) Style() string {
@@ -182,6 +210,20 @@ func (c *Classifier) ClassifyNamespace(ctxName, namespace string) Verdict {
 		}
 	}
 	return Verdict{Level: config.LevelSafe}
+}
+
+// Namespaces returns every namespace some rule guards, sorted.
+func (c *Classifier) Namespaces() []string {
+	var out []string
+	for _, r := range c.nsRules {
+		for ns := range r.namespaces {
+			if !slices.Contains(out, ns) {
+				out = append(out, ns)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // verdict renders a matched rule as its answer.
