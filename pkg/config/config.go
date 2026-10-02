@@ -336,10 +336,38 @@ func (c *Config) Save() error {
 	if err != nil {
 		return fmt.Errorf("encode config: %w", err)
 	}
-	if err := os.WriteFile(c.path, append([]byte(header), data...), filePerm); err != nil {
+	if err := replaceFile(c.path, append([]byte(header), data...)); err != nil {
 		return fmt.Errorf("write config %s: %w", c.path, err)
 	}
 	return nil
+}
+
+// replaceFile swaps data in with one rename, so a write cut short leaves the old
+// file: a truncated config loads as the built-in guards, silently dropping every
+// rule the user wrote. A symlink is followed rather than replaced, since dotfile
+// managers keep this file as one.
+func replaceFile(path string, data []byte) error {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // a no-op once renamed
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // ResolveAlias maps an alias to its context name, returning name unchanged when

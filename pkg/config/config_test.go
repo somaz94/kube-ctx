@@ -152,6 +152,79 @@ func TestSaveResolvesPathWhenUnset(t *testing.T) {
 	}
 }
 
+// Rewriting in place truncates first, and a write cut short there left a file
+// that loads as the built-in guards. A new file renamed over the old one is
+// the only way the old contents survive a failure, so that is what is checked.
+func TestSaveReplacesTheFileRatherThanRewritingIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	cfg := &Config{path: path}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("first Save: %v", err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	if err := cfg.SetAlias("p", "prod"); err != nil {
+		t.Fatalf("SetAlias: %v", err)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("second Save: %v", err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if os.SameFile(before, after) {
+		t.Error("Save rewrote the file in place instead of replacing it")
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("dir holds %d entries, want only the config: %v", len(entries), entries)
+	}
+}
+
+// Dotfile managers keep config.yaml as a link into their own repository. A
+// rename onto the link's path would replace the link with a plain file and
+// quietly detach the config from where the user keeps it.
+func TestSaveWritesThroughASymlink(t *testing.T) {
+	real := filepath.Join(t.TempDir(), "dotfiles-config.yaml")
+	if err := os.WriteFile(real, nil, filePerm); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	link := filepath.Join(t.TempDir(), FileName)
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	cfg := &Config{path: link}
+	if err := cfg.SetAlias("p", "prod"); err != nil {
+		t.Fatalf("SetAlias: %v", err)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("lstat: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("the symlink was replaced by a regular file")
+	}
+	data, err := os.ReadFile(real)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if !strings.Contains(string(data), "p: prod") {
+		t.Errorf("the link's target was not updated:\n%s", data)
+	}
+}
+
 func TestSaveIntoUnwritableDir(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(file, []byte("x"), filePerm); err != nil {

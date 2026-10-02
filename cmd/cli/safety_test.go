@@ -826,10 +826,13 @@ func TestRenameStopsBeforeTheKubeconfigWhenGuardsCannotBeSaved(t *testing.T) {
 	}
 	h := newHarness(t, defaultSpec())
 	writeUserConfig(t, guardExactConfig)
-	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "kube-ctx", "config.yaml")
-	if err := os.Chmod(path, 0o400); err != nil {
+	// The directory, not the file: a save replaces config.yaml by renaming a
+	// new file over it, which a read-only file does not stop.
+	dir := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "kube-ctx")
+	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
 	if err := h.run("rename", "prod", "live"); err == nil {
 		t.Fatal("rename succeeded; the config write did not fail")
