@@ -210,7 +210,7 @@ The certificate is the unit, not whatever manages it — a secret pasted in by h
 
 ## Taking on another kubeconfig
 
-Someone sends you a kubeconfig. The usual answer is `KUBECONFIG=a:b kubectl config view --flatten > merged`, and it has a trap: every kubeadm cluster calls its cluster `kubernetes` and its user `kubernetes-admin`, so the merge resolves the collision by last-writer-wins and quietly repoints the contexts you already had at a different API server. You find out later, from the wrong cluster.
+Someone sends you a kubeconfig. The usual answer is `KUBECONFIG=a:b kubectl config view --flatten > merged`, and it has a trap: every kubeadm cluster calls its cluster `kubernetes` and its user `kubernetes-admin`, so the merge resolves the collision by first-writer-wins and the contexts from the file listed second quietly land on the first file's API server. You find out later, from the wrong cluster.
 
 ```bash
 $ kctx import ~/Downloads/kubeconfig.yaml

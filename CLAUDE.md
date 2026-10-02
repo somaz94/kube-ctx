@@ -76,9 +76,9 @@ without asking — they are the release pipeline.
 - **Transfer** (`pkg/transfer`) — `Merge` for `import`, `Extract` for `export`,
   both in memory. Three things there are non-obvious. A colliding cluster or
   user stanza is never replaced when its contents differ — that is how
-  `kubectl config view --flatten` silently repoints existing contexts at another
-  API server — but one that *is* identical is reused, or importing five contexts
-  that share a cluster leaves five copies. Comparison zeroes
+  `kubectl config view --flatten` silently points one file's contexts at the
+  other's API server — but one that *is* identical is reused, or importing five
+  contexts that share a cluster leaves five copies. Comparison zeroes
   `LocationOfOrigin` first: clientcmd stamps every stanza with its file, so a
   raw `DeepEqual` never matches and every re-import would look like a conflict.
   And an imported stanza has that field *cleared*, because `ModifyConfig` routes

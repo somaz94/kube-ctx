@@ -46,7 +46,7 @@ Situations kube-ctx was built for, and what it does about them.
 
 ## The kubeconfig in your Downloads folder
 
-**The problem.** A colleague sends you the kubeconfig for a cluster you need today. Both it and yours were produced by `kubeadm`, so both call their cluster `kubernetes` and their user `kubernetes-admin`. `KUBECONFIG=mine:theirs kubectl config view --flatten` resolves that by last-writer-wins: the merge succeeds, and the contexts you already had now point at their API server. Nothing tells you.
+**The problem.** A colleague sends you the kubeconfig for a cluster you need today. Both it and yours were produced by `kubeadm`, so both call their cluster `kubernetes` and their user `kubernetes-admin`. `KUBECONFIG=mine:theirs kubectl config view --flatten` resolves that by first-writer-wins: the merge succeeds, and the contexts you just took in now point at your API server, with your credentials, so a command meant for their cluster runs against yours. Nothing tells you.
 
 **What kube-ctx does.** `kctx import` treats a colliding stanza as a collision. One whose contents differ is stored under a name of its own and only the imported context is pointed at it; one that is identical is reused rather than copied. Colliding context names stop the import until you choose `--prefix`, `--as` or `--overwrite`, `--dry-run` shows the plan first, and the kubeconfig is backed up before the write. `kctx export prod --flatten` is the same job in reverse — one context, certificates inlined, ready to hand over.
 
