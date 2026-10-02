@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# bash only: zsh runs an EXIT trap set inside a function when that function
+# returns, so setup's cleanup would delete the workspace before the first check.
+[ -n "${BASH_VERSION:-}" ] || exec bash "$0" "$@"
 set -euo pipefail
 
 # End-to-end suite for kctx, run against a real Kubernetes API server.
