@@ -436,6 +436,24 @@ func TestExportGuardPromptStaysOffStdout(t *testing.T) {
 	}
 }
 
+// Piped answers must reach every guarded target's question. A reader per
+// prompt swallowed the second answer and read EOF as a decline.
+func TestExportAsksEveryGuardedTargetFromOnePipe(t *testing.T) {
+	h := newHarness(t, testutil.Spec{
+		Current:  "prod-a",
+		Contexts: []testutil.Ctx{{Name: "prod-a"}, {Name: "prod-b"}},
+	})
+	writeUserConfig(t, guardConfirmConfig)
+	h.stdin("prod-a\nprod-b\n")
+
+	if err := h.run("export", "prod-a", "prod-b"); err != nil {
+		t.Fatalf("export with both names retyped: %v\nstderr: %s", err, h.stderr())
+	}
+	if got := len(parseKubeconfig(t, h.stdout()).Contexts); got != 2 {
+		t.Errorf("exported %d contexts, want 2", got)
+	}
+}
+
 // parseKubeconfig reads a kubeconfig out of captured output.
 func parseKubeconfig(t *testing.T, data string) *clientcmdapi.Config {
 	t.Helper()

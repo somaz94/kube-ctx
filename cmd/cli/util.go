@@ -134,6 +134,7 @@ func joinNames(names []string) string { return strings.Join(names, ", ") }
 func promptingOnStderr(a *app) *app {
 	redirected := *a
 	redirected.out = a.errOut
+	redirected.prompts = a.stdin() // one reader across views, or the next answer is swallowed
 	return &redirected
 }
 

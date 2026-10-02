@@ -296,3 +296,15 @@ func TestBareCommandWithoutTerminalLists(t *testing.T) {
 		t.Errorf("stdout = %q", h.stdout())
 	}
 }
+
+// Every view must read through one buffered reader: two readers over the same
+// stdin each buffer ahead, so the second question reads EOF and a decline.
+func TestPromptingOnStderrSharesOneReader(t *testing.T) {
+	a := &app{in: strings.NewReader("first\nsecond\n"), out: &bytes.Buffer{}, errOut: &bytes.Buffer{}}
+
+	first, _ := promptingOnStderr(a).stdin().ReadString('\n')
+	second, _ := promptingOnStderr(a).stdin().ReadString('\n')
+	if first != "first\n" || second != "second\n" {
+		t.Errorf("views read %q then %q, want first then second", first, second)
+	}
+}

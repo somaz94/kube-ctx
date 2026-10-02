@@ -65,11 +65,12 @@ func runExport(a *app, names []string, opts exportOptions) error {
 	if err != nil {
 		return err
 	}
+	// The prompt goes to stderr: stdout is where the kubeconfig goes, and a
+	// question printed there would end up at the top of the file the user
+	// redirected it into.
+	prompt := promptingOnStderr(a)
 	for _, target := range targets {
-		// The prompt goes to stderr: stdout is where the kubeconfig goes, and a
-		// question printed there would end up at the top of the file the user
-		// redirected it into.
-		if err := requireGuardConfirmation(promptingOnStderr(a), target); err != nil {
+		if err := requireGuardConfirmation(prompt, target); err != nil {
 			return err
 		}
 	}
