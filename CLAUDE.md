@@ -300,7 +300,9 @@ without asking — they are the release pipeline.
 - Tests must never touch the developer's real `~/.kube/config`: use
   `internal/testutil` plus `t.Setenv` for `KUBECONFIG` and the XDG variables.
   `newHarness` (`cmd/cli/cli_test.go`) does all of it, and also stubs the picker
-  and the process spawner — a test that reached `/dev/tty` would block forever.
+  — a test that reached `/dev/tty` would block forever. It leaves the process
+  spawner (`runCommand`) alone: a test that reaches `shell` or `exec` swaps it
+  itself, via `captureRunNoop`, `allowRun`, `fanoutRun` or an inline override.
 - The e2e suite (`scripts/e2e.sh`) covers what those stubs rule out: a
   kubeconfig `kubectl` reads back, an API server that answers `doctor`, and real
   bash / zsh / fish processes sourcing the hook — where a switch written in the
