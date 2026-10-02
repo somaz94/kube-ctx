@@ -86,7 +86,7 @@ same binary as plain `kctx`. The two can be installed side by side.
 ### Install script
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 ```
 
 Detects the platform, downloads the matching release archive, and installs `kctx` into `/usr/local/bin` (with `sudo` only when that directory is not writable).
@@ -95,15 +95,16 @@ Detects the platform, downloads the matching release archive, and installs `kctx
 
 ### Binary
 
-Release archives are named after the project, and the binary inside is `kctx`:
+Release archives are named by `archives.name_template` in `.goreleaser.yml` — the project, then the version, OS and arch — so fetching the latest one means resolving its version first; the binary inside is `kctx`:
 
 ```bash
 # latest
-curl -sL https://github.com/somaz94/kube-ctx/releases/latest/download/kube-ctx_linux_amd64.tar.gz | tar xz
+VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/somaz94/kube-ctx/releases/latest) && VERSION=${VERSION##*/v}
+curl -fsSL "https://github.com/somaz94/kube-ctx/releases/download/v${VERSION}/kube-ctx_${VERSION}_linux_amd64.tar.gz" | tar xz kctx
 sudo mv kctx /usr/local/bin/
 
 # a specific version
-curl -sL https://github.com/somaz94/kube-ctx/releases/download/v0.1.0/kube-ctx_0.1.0_darwin_arm64.tar.gz | tar xz
+curl -fsSL https://github.com/somaz94/kube-ctx/releases/download/v0.1.0/kube-ctx_0.1.0_darwin_arm64.tar.gz | tar xz kctx
 sudo mv kctx /usr/local/bin/
 ```
 

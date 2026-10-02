@@ -79,16 +79,14 @@ kubectl krew index add somaz94 https://github.com/somaz94/krew-index
 kubectl krew install somaz94/ctx2
 
 # Install script
-curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
-
-# Binary
-curl -sL https://github.com/somaz94/kube-ctx/releases/latest/download/kube-ctx_linux_amd64.tar.gz | tar xz
-sudo mv kctx /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 
 # From source
 git clone https://github.com/somaz94/kube-ctx.git
 cd kube-ctx && make build && make install       # → /usr/local/bin/kctx
 ```
+
+Prebuilt archives without the install script: [Deployment → Binary](docs/DEPLOYMENT.md#binary).
 
 Then, for per-terminal isolation, one line in your rc file:
 
