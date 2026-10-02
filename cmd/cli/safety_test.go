@@ -210,6 +210,22 @@ func TestCurrentJSON(t *testing.T) {
 	}
 }
 
+// The context is read straight from current-context, so a name left behind by
+// a deleted context still prints; only the namespace needs the context itself.
+func TestCurrentPrintsADanglingContext(t *testing.T) {
+	h := newHarness(t, testutil.Spec{Current: "gone", Contexts: []testutil.Ctx{{Name: "dev"}}})
+
+	if err := h.run("current"); err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if got := strings.TrimSpace(h.stdout()); got != "gone" {
+		t.Errorf("stdout = %q, want gone", got)
+	}
+	if err := h.run("current", "-n"); err == nil {
+		t.Error("current -n succeeded for a context that does not exist")
+	}
+}
+
 // Silent rather than noisy: a prompt integration should not paint an error
 // into the terminal on every keystroke.
 func TestCurrentWithNothingSet(t *testing.T) {

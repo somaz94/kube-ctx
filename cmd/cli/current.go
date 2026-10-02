@@ -43,29 +43,20 @@ func runCurrent(a *app, wantNamespace bool) error {
 	}
 
 	value := cfg.CurrentContext
-	if wantNamespace {
+	// Only when asked for: a current-context naming a context that no longer
+	// exists still prints, which is what a prompt wants to show.
+	if wantNamespace || a.jsonOutput() {
 		ns, err := contexts.Namespace(cfg, "")
 		if err != nil {
 			return err
 		}
-		if ns == "" {
-			ns = "default"
+		if a.jsonOutput() {
+			return writeJSON(a, struct {
+				Context   string `json:"context"`
+				Namespace string `json:"namespace"`
+			}{cfg.CurrentContext, ns})
 		}
 		value = ns
-	}
-
-	if a.jsonOutput() {
-		ns, err := contexts.Namespace(cfg, "")
-		if err != nil {
-			return err
-		}
-		if ns == "" {
-			ns = "default"
-		}
-		return writeJSON(a, struct {
-			Context   string `json:"context"`
-			Namespace string `json:"namespace"`
-		}{cfg.CurrentContext, ns})
 	}
 
 	// Deliberately unadorned: this is substituted into a prompt string, so a
