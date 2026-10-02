@@ -28,9 +28,9 @@ import (
 const (
 	// sessionSubdir is the state subdirectory holding per-shell kubeconfigs.
 	sessionSubdir = "shells"
-	// DefaultMaxAge is how long an orphaned session file is kept. A shell that
-	// exits without cleaning up (a closed terminal window, a killed SSH
-	// session) leaves its copy behind, so the next session sweeps old ones.
+	// DefaultMaxAge is how long an idle session copy is kept. Hooked terminals
+	// leave theirs on exit on purpose (a tmux server started there may still
+	// read it), and a killed "kctx shell" skips its cleanup.
 	DefaultMaxAge = 7 * 24 * time.Hour
 	// filePerm keeps session kubeconfigs owner-only; they carry credentials.
 	filePerm = 0o600

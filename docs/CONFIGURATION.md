@@ -218,10 +218,10 @@ Durable edits — the commands that change the kubeconfig rather than switch wit
 ```console
 $ kctx delete staging
 Error: delete would edit this shell's private kubeconfig copy (session 83cc09ccfef7),
-which is discarded when the shell exits; leave the kube-ctx shell first
+which nothing reads once the shell is gone; run it from a terminal without a kube-ctx session
 ```
 
-There, `$KUBECONFIG` is the private copy, so the edit would land in a file that is deleted when the shell exits — reporting success and then vanishing. Switching contexts is shell-local on purpose; an edit meant to outlive the shell is not. Run these from a terminal without a kube-ctx session.
+There, `$KUBECONFIG` is the private copy, so the edit would land in a file nothing reads once the shell is gone — reporting success and then having no effect. Switching contexts is shell-local on purpose; an edit meant to outlive the shell is not. Run these from a terminal without a kube-ctx session: a new one, before its first switch.
 
 <br/>
 
@@ -266,7 +266,7 @@ test -n "$KUBE_CTX_ACTIVE"; and echo -n "[$KUBE_CTX_ACTIVE] "
 | `$XDG_STATE_HOME/kube-ctx/shells/<id>.yaml` | `0600` | Per-terminal kubeconfig copies |
 | `$XDG_CACHE_HOME/kube-ctx/namespaces/*.json` | `0600` | Namespace list cache |
 
-Session copies hold credentials, which is why nothing here is group- or world-readable. Copies left behind by a shell that was killed rather than exited are swept after 7 days, on the next session.
+Session copies hold credentials, which is why nothing here is group- or world-readable. A hooked terminal does not remove its copy when it closes, because a tmux server or editor started from it may still be reading that `$KUBECONFIG`; a `kctx shell` removes its own on exit unless it is killed. Either way, a copy nothing has used for 7 days is swept the next time a terminal starts a session, and `kctx sessions --clean` removes idle ones on demand.
 
 Backups are taken before [durable edits](#durable-edits-inside-a-managed-shell) only. A plain context or namespace switch is frequent and trivially reversible, so it does not pay the copy.
 

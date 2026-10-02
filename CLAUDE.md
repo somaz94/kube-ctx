@@ -99,7 +99,10 @@ without asking — they are the release pipeline.
   rewrites a session copy except a context or namespace switch, so a terminal
   open past `DefaultMaxAge` without switching would have its kubeconfig deleted
   while `$KUBECONFIG` still pointed at it. `kctx sessions` surfaces the same
-  list, and never removes the caller's own copy.
+  list, and never removes the caller's own copy. The hook deliberately removes
+  nothing on exit: a tmux server or editor started from that terminal inherits
+  `$KUBECONFIG`, and deleting the copy would strand it on a missing file.
+  `kctx shell` does remove its own, and carries that hazard.
 - **Directory bindings** (`cmd/cli/bind.go`) — `kctx bind` maps a directory to
   a context, and the shell hook runs `bind --apply` on every directory change.
   Three rules make it livable rather than bossy: it applies once per tree
@@ -280,9 +283,9 @@ without asking — they are the release pipeline.
   macOS keeps the symlink and looks fine, which is how this would have shipped
   broken on the platform most kubectl users are on.
 - **Durable edits are refused in a session** — inside a managed shell
-  `$KUBECONFIG` is a copy that dies with the shell, so `rename`, `delete` and
-  `import` stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than
-  reporting a success that disappears on exit. Switching is meant to be
+  `$KUBECONFIG` is a copy nothing reads once the shell is gone, so `rename`,
+  `delete` and `import` stop at `guardSessionScoped` (`cmd/cli/session.go`)
+  rather than reporting a success that has no effect. Switching is meant to be
   shell-local; an edit is not.
 
 <br/>

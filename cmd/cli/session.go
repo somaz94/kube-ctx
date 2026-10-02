@@ -37,7 +37,7 @@ func guardSessionScoped(op string) error {
 		return nil
 	}
 	return fmt.Errorf("%s would edit this shell's private kubeconfig copy (session %s), "+
-		"which is discarded when the shell exits; leave the kube-ctx shell first",
+		"which nothing reads once the shell is gone; run it from a terminal without a kube-ctx session",
 		op, os.Getenv(EnvShellID))
 }
 

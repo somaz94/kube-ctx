@@ -349,7 +349,7 @@ kctx shell prod-eks -n monitoring
 kctx shell                        # the current context
 ```
 
-Opens a subshell (`$SHELL`) whose `$KUBECONFIG` points at a private copy pinned to that context. The global kubeconfig is never written, so other terminals keep the context they were on. The copy is deleted when the shell exits.
+Opens a subshell (`$SHELL`) whose `$KUBECONFIG` points at a private copy pinned to that context. The global kubeconfig is never written, so other terminals keep the context they were on. The copy is deleted when the shell exits, so anything long-lived started inside it — a tmux server, an editor — loses its `$KUBECONFIG` at that point; start those from an ordinary terminal.
 
 Inside the shell, `$KUBE_CTX_ACTIVE` names the context and `$KUBE_CTX_DEPTH` counts how many managed shells deep you are.
 
@@ -386,7 +386,7 @@ kctx sessions --clean --all    # drop everything but this shell's
    112233445566  staging-eks  9d ago
 ```
 
-Each row is a private kubeconfig copy — one per managed terminal, holding every cluster and credential your kubeconfig does. One is created the first time a hooked terminal switches context and removed when a `kctx shell` exits, but a terminal closed by killing the window leaves its copy behind. `*` marks this shell's own.
+Each row is a private kubeconfig copy — one per managed terminal, holding every cluster and credential your kubeconfig does. One is created the first time a hooked terminal switches context, or by `kctx shell`, which removes its own on exit. A hooked terminal's copy outlives the terminal: a tmux server or editor started from it inherits that `$KUBECONFIG`, and deleting the file on exit would leave them pointing at nothing. Copies unused for 7 days are swept the next time a session starts. `*` marks this shell's own.
 
 **LAST USED is time since last use, not since creation.** Every kube-ctx command run inside a session refreshes it, so a terminal you have had open for a month is not mistaken for an abandoned one. That is what makes the sweep safe: nothing else rewrites a session copy, so without it a long-lived terminal would have its kubeconfig deleted out from under it and every later `kubectl` would fail on a file that is no longer there.
 

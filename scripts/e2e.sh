@@ -346,7 +346,7 @@ EOF
   assert_contains "/kube-ctx/shells/" "... with KUBECONFIG pointed at a session copy"
   assert_contains "session=$STAGING" "... whose current-context is the pinned one"
   assert_contains "delete-status=1" "a durable edit inside the session is refused"
-  assert_contains "discarded when the shell exits" "... and says why"
+  assert_contains "nothing reads once the shell is gone" "... and says why"
   assert_eq "$LIVE" "$(current_context)" "the global kubeconfig is untouched by the session"
   assert_eq "0" "$(session_count)" "the session copy is removed on exit"
 }

@@ -22,17 +22,18 @@ func newSessionsCmd(a *app) *cobra.Command {
 		Short:   "List the per-terminal kubeconfig copies",
 		Long: "List the private kubeconfig copies kube-ctx keeps for managed shells.\n\n" +
 			"One is created the first time a terminal with the shell hook switches\n" +
-			"context, and removed when a \"kctx shell\" exits. A terminal closed by\n" +
-			"killing the window leaves its copy behind, and each one holds every\n" +
-			"cluster and credential in your kubeconfig — so knowing what is there\n" +
-			"matters.\n\n" +
+			"context, or by \"kctx shell\", which removes its own on exit. A hooked\n" +
+			"terminal's copy outlives the terminal, since a tmux server or editor\n" +
+			"started there may still be reading it, and each one holds every cluster\n" +
+			"and credential in your kubeconfig — so knowing what is there matters.\n\n" +
 			"  kctx sessions            list them\n" +
 			"  kctx sessions --clean    remove the ones nothing has used in a week\n" +
 			"  kctx sessions --clean --all\n" +
 			"                           remove every one but this shell's\n\n" +
 			"Age is time since last use, not since creation: every kube-ctx command\n" +
 			"run in a session refreshes it, so a terminal open for a month is not\n" +
-			"mistaken for an abandoned one.",
+			"mistaken for an abandoned one. Copies idle for a week are also swept\n" +
+			"automatically whenever a terminal starts a session.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSessions(a, clean, all)
