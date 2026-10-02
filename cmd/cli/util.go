@@ -67,8 +67,10 @@ func resolveContext(a *app, cfg *clientcmdapi.Config, name string) (string, erro
 		target = userCfg.ResolveAlias(name)
 	}
 	// A context may itself be named "@team", and completion offers it as typed.
-	// With no alias to force, that name can only mean the context.
-	if !contexts.Exists(cfg, target) && contexts.Exists(cfg, name) {
+	// Unless an alias claims that name, it means the context, even beside a
+	// context called plain "team" that stripping the "@" would reach instead.
+	_, claimed := userCfg.Aliases[strings.TrimPrefix(name, "@")]
+	if contexts.Exists(cfg, name) && (!claimed || !contexts.Exists(cfg, target)) {
 		target = name
 	}
 	if !contexts.Exists(cfg, target) {

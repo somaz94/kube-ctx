@@ -255,10 +255,11 @@ func TestBareNamePrefersContextAndAtForcesAlias(t *testing.T) {
 }
 
 // kubeconfig allows a context name to start with "@". Read only as a forced
-// alias, such a context was unreachable even though completion offered it.
+// alias, such a context was unreachable even though completion offered it, and
+// with a plain "team" beside it the stripped name won.
 func TestContextNamedWithALeadingAt(t *testing.T) {
 	h := newHarness(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{
-		{Name: "dev"}, {Name: "prod"}, {Name: "@team"},
+		{Name: "dev"}, {Name: "prod"}, {Name: "@team"}, {Name: "team"},
 	}})
 
 	if err := h.run("ctx", "@team"); err != nil {
