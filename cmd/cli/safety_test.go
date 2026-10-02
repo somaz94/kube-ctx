@@ -122,6 +122,7 @@ func TestAssumeYesSkipsTheGuardEverywhere(t *testing.T) {
 		{"ctx", "prod", "-y"},
 		{"shell", "prod", "-y"},
 		{"exec", "prod", "-y", "--", "true"},
+		{"export", "prod", "-y"},
 	} {
 		t.Run(args[0], func(t *testing.T) {
 			h := newHarness(t, defaultSpec())
@@ -132,9 +133,10 @@ func TestAssumeYesSkipsTheGuardEverywhere(t *testing.T) {
 				t.Fatalf("%v: %v", args, err)
 			}
 			// "to continue:" is the prompt's own wording — matching on "Type "
-			// alone would also hit the subshell's "Type exit to leave."
-			if strings.Contains(h.stdout(), "to continue:") {
-				t.Errorf("-y still prompted: %q", h.stdout())
+			// alone would also hit the subshell's "Type exit to leave." Both
+			// streams: export asks on stderr, since stdout is the kubeconfig.
+			if out := h.stdout() + h.stderr(); strings.Contains(out, "to continue:") {
+				t.Errorf("-y still prompted: %q", out)
 			}
 		})
 	}
