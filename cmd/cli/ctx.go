@@ -317,8 +317,12 @@ func contextCandidates(a *app, used []string) ([]string, cobra.ShellCompDirectiv
 	}
 	if userCfg, err := a.userConfig(); err == nil {
 		for _, pair := range userCfg.AliasList() {
-			if _, ok := taken[pair.Alias]; !ok {
-				names = append(names, pair.Alias+"\t→ "+pair.Target)
+			name := pair.Alias
+			if contexts.Exists(cfg, name) {
+				name = "@" + name // the bare name reaches the context it shadows
+			}
+			if _, ok := taken[name]; !ok {
+				names = append(names, name+"\t→ "+pair.Target)
 			}
 		}
 	}

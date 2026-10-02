@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -222,6 +223,25 @@ func TestCtxResolvesAlias(t *testing.T) {
 	}
 	if got := h.config().CurrentContext; got != "prod" {
 		t.Errorf("current = %q, want prod", got)
+	}
+}
+
+// The documented precedence for an alias that shadows a context: the bare name
+// is the context, "@" forces the alias. The alias used to win either way, which
+// left the shadowed context unreachable by name.
+func TestBareNamePrefersContextAndAtForcesAlias(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	if err := h.run("alias", "staging", "prod"); err != nil {
+		t.Fatalf("alias: %v", err)
+	}
+	for _, tt := range []struct{ arg, want string }{{"staging", "staging"}, {"@staging", "prod"}} {
+		if err := h.run("ctx", tt.arg); err != nil {
+			t.Fatalf("ctx %s: %v", tt.arg, err)
+		}
+		if got := h.config().CurrentContext; got != tt.want {
+			t.Errorf("ctx %s landed on %q, want %q", tt.arg, got, tt.want)
+		}
 	}
 }
 
@@ -689,6 +709,24 @@ func TestCompleteContexts(t *testing.T) {
 	// argument.
 	if got, _ := completeContexts(a)(nil, []string{"dev"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
+	}
+}
+
+// The bare name of an alias that shadows a context reaches the context, so the
+// alias is offered in the "@" form that still reaches it.
+func TestCompleteOffersShadowingAliasWithAt(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	if err := h.run("alias", "staging", "prod"); err != nil {
+		t.Fatalf("alias: %v", err)
+	}
+
+	a := &app{out: &h.out, errOut: &h.errOut, in: h.in}
+	got, _ := completeContexts(a)(nil, nil, "")
+	if !slices.Contains(got, "@staging\t→ prod") {
+		t.Errorf("completions %q missing the @ form of the shadowing alias", got)
+	}
+	if slices.Contains(got, "staging\t→ prod") {
+		t.Errorf("completions %q offer the bare name, which reaches the context", got)
 	}
 }
 

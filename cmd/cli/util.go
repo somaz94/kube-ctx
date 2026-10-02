@@ -43,8 +43,8 @@ func writeJSON(a *app, payload any) error {
 }
 
 // resolveContext turns a name typed on the command line into a context that
-// exists: "." is the current context, an alias is expanded, and whatever is
-// left is checked against the kubeconfig.
+// exists: "." is the current context, a context's own name beats an alias of
+// the same name, and "@name" forces the alias.
 //
 // Every command taking a context name goes through here. Completion offers
 // aliases for all of them, so a command that skipped the alias step would be
@@ -62,7 +62,10 @@ func resolveContext(a *app, cfg *clientcmdapi.Config, name string) (string, erro
 	if err != nil {
 		return "", err
 	}
-	target := userCfg.ResolveAlias(name)
+	target := name
+	if strings.HasPrefix(name, "@") || !contexts.Exists(cfg, name) {
+		target = userCfg.ResolveAlias(name)
+	}
 	if !contexts.Exists(cfg, target) {
 		// Report what the user typed, not what the alias expanded to: being
 		// told that "prod-eks-apne2" does not exist when you typed "p" is a
