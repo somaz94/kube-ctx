@@ -109,10 +109,8 @@ func execOne(base *clientcmdapi.Config, target string, argv []string, namespace 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = childEnv(session.Env(shellenv.Depth())...)
-	// No stdin, and the output is captured rather than passed through: several
-	// children cannot share one terminal. Lines from four clusters interleaved
-	// are unreadable, and a command that waits on stdin would hang the sweep
-	// with nothing on screen to explain why.
+	// Captured, with no stdin: several children cannot share one terminal, and one
+	// waiting on stdin would hang the sweep with nothing on screen to say why.
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 
 	err = runCommand(cmd)
@@ -140,8 +138,8 @@ func reportFanout(a *app, results []fanoutResult, namespaces []string) error {
 	pal := a.palette()
 	for i, r := range results {
 		header := "== " + pal.Bold(r.Context) + guardSuffix(a, r.Context)
-		// The fan-out has the widest blast radius of the three, so a guarded
-		// namespace must not be the one thing it runs against in silence.
+		// A fan-out has the widest blast radius of any route, so a guarded namespace
+		// must not be the one thing it runs against in silence.
 		if badge := namespaceGuardSuffix(a, r.Context, namespaces[i]); badge != "" {
 			header += ", namespace " + pal.Bold(namespaces[i]) + badge
 		}

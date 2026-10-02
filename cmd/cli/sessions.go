@@ -71,7 +71,7 @@ func runSessions(a *app, clean, all bool) error {
 	return renderOutput(a, []string{"", "ID", "CONTEXT", "LAST USED"}, rows, sessions)
 }
 
-// cleanSessions removes abandoned session copies.
+// cleanSessions removes idle session copies, or with all every one but this shell's.
 func cleanSessions(a *app, sessions []shellenv.Info, all bool) error {
 	removed := 0
 	for _, s := range sessions {

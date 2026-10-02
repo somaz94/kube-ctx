@@ -46,10 +46,9 @@ func writeJSON(a *app, payload any) error {
 // exists: "." is the current context, a context's own name beats an alias of
 // the same name, and "@name" forces the alias.
 //
-// Every command taking a context name goes through here. Completion offers
-// aliases for all of them, so a command that skipped the alias step would be
-// suggesting inputs it then rejects — which is exactly what rename, delete,
-// doctor and guard did before this existed.
+// Every command taking a context name goes through here: completion offers
+// aliases for all of them, so one that skipped this would suggest inputs it
+// then rejects.
 func resolveContext(a *app, cfg *clientcmdapi.Config, name string) (string, error) {
 	if name == "." {
 		if cfg.CurrentContext == "" {

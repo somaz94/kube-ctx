@@ -151,7 +151,7 @@ func runBindApply(a *app, opts bindOptions) error {
 		return err
 	}
 	// The overwhelmingly common case, and the one that has to cost nothing: no
-	// bindings at all, so nothing is read and no kubeconfig is loaded.
+	// bindings at all, so no directory is resolved and no kubeconfig is loaded.
 	if len(userCfg.Bindings) == 0 {
 		return nil
 	}
@@ -181,10 +181,8 @@ func runBindApply(a *app, opts bindOptions) error {
 	if err != nil {
 		return err
 	}
-	// The namespace counts as well as the context: a directory bound to a
-	// context whose own default is kube-system would otherwise drop the shell
-	// into the guarded namespace on a cd, and walking into a directory is no
-	// more consent to that than it is to being in production.
+	// The namespace counts too: a context whose own default is kube-system would
+	// otherwise drop the shell into a guarded namespace on a cd.
 	if classifier.Classify(target).Confirm ||
 		classifier.ClassifyNamespace(target, namespaceOf(cfg, target)).Confirm {
 		return announceBound(a, target, fmt.Sprintf("%s is guarded; switch to it explicitly with \"kctx ctx %s\"",

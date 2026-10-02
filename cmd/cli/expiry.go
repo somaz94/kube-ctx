@@ -138,7 +138,7 @@ func runExpiry(a *app, names []string, opts expiryOptions) error {
 	// Unknown reads the unfiltered results, like the warning above: keyed to the
 	// display slice, a later display-side filter would take the cron gate with it.
 	if expiry.Expiring(due) || expiry.Unknown(results) {
-		// Silent: the table already said what.
+		// Silent: the report already said what.
 		return &exitError{code: ExitUnhealthy}
 	}
 	return nil
@@ -168,10 +168,8 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 	pal := a.palette()
 	rows := make([][]string, 0)
 	for _, r := range results {
-		// A context that established nothing gets a row saying so. Without
-		// this a refused secrets list rendered as a header and no rows, while
-		// exiting 2 — the exit status called it unreadable and the table
-		// showed a clean sweep.
+		// A context that established nothing gets a row saying so, or the table
+		// shows a clean sweep while the exit status says unreadable.
 		if reason := unreadable(r); reason != "" {
 			rows = append(rows, []string{
 				boldIfCurrent(pal, r.Context, current), "-", "-",

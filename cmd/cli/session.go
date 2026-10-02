@@ -60,8 +60,7 @@ func startShellSession(a *app, cfg *clientcmdapi.Config, target string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	// Sweep idle copies: no hooked terminal removes its own on exit, and a killed
-	// "kctx shell" skips its Remove. Best-effort: never fail the switch over it.
+	// Best-effort sweep of idle copies; shellenv.DefaultMaxAge says why they linger.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
 	if err := os.WriteFile(envFile, []byte(session.Exports(hookShell(), shellenv.Depth()+1)), 0o600); err != nil {

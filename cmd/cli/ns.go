@@ -13,9 +13,9 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/picker"
 )
 
-// nsHistoryPrefix keeps namespace history separate per context: "back one
-// namespace" in the dev cluster must not offer a namespace that only exists in
-// prod.
+// nsHistoryPrefix marks a namespace history, which is kept per context: "back
+// one namespace" in the dev cluster must not offer a namespace that only exists
+// in prod.
 const nsHistoryPrefix = "ns-"
 
 // newNsCmd switches the namespace of the current context.

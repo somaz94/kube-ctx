@@ -37,17 +37,11 @@ type app struct {
 	errOut io.Writer
 	in     io.Reader
 
-	// prompts buffers stdin across every question one command asks.
-	//
-	// A fresh bufio.Reader per prompt reads ahead and then throws away
-	// whatever it buffered past the first newline, so the second question of
-	// a command would always see EOF and read a decline. That is invisible at
-	// a terminal, which delivers one line per Read, and fatal to anything
-	// piping its answers in — and a command asking twice is now ordinary,
-	// since a guarded context and a guarded namespace are asked separately.
-	//
-	// A pointer, so promptingOnStderr's copy of the app shares the position
-	// rather than restarting from a drained reader.
+	// prompts buffers stdin across every question one command asks. A reader per
+	// prompt reads ahead and drops what it buffered past the first newline, so a
+	// second question saw EOF and read a decline: hidden at a terminal, which
+	// delivers one line per Read, fatal to piped answers. A pointer, so
+	// promptingOnStderr's copy of the app shares the position.
 	prompts *bufio.Reader
 
 	// sessionID is the session this command opened on a hooked shell's first
@@ -57,8 +51,8 @@ type app struct {
 	sessionID string
 
 	// compiled memoizes the guard rules for one command: callers classify per
-	// item (a fan-out asks per target and again per result), and no command
-	// writes guard rules and then classifies.
+	// item (a fan-out asks per target and again per result). It is never
+	// invalidated, so rename, which rewrites the rules, compiles its own.
 	compiled *guard.Classifier
 }
 
@@ -211,11 +205,9 @@ var historyArgPattern = regexp.MustCompile(`^-([0-9]+)$`)
 // ever sees it, so the ergonomic form has to be translated first. A bare "-"
 // is left alone: it is not flag-shaped, and the commands accept it directly.
 //
-// Everything after the first "--" is copied verbatim, because it is not this
-// tool's argv at all — it is the child's. Rewriting there turned
-// "kctx exec dev -- kubectl logs --tail -1" into a --tail of "--back=1", which
-// is a shorthand only kube-ctx knows and the child then rejects. The terminator
-// is the boundary the shell already draws; kube-ctx has no business past it.
+// Everything after the first "--" is the child's argv and is copied verbatim:
+// rewriting there turned "kctx exec dev -- kubectl logs --tail -1" into a
+// --tail of "--back=1", a shorthand only kube-ctx knows.
 func normalizeArgs(args []string) []string {
 	out := make([]string, 0, len(args))
 	for i, arg := range args {
@@ -272,8 +264,7 @@ func Execute() error {
 	root.SetArgs(normalizeArgs(os.Args[1:]))
 
 	if err := root.Execute(); err != nil {
-		// A silent error carries an exit status only; the command already
-		// printed everything the user needs.
+		// An exitError is silent: the command already printed what the user needs.
 		if err.Error() != "" {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}

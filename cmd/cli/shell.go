@@ -53,9 +53,8 @@ func runShell(a *app, args []string, namespace string) error {
 	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
-	// The namespace the shell opens in, whether -n named it or the context
-	// already pointed there. Guarding only the flag would mean a context whose
-	// own default is kube-system walks in unguarded.
+	// Guard the effective namespace, not just -n: a context whose own default is
+	// kube-system would otherwise walk in unguarded.
 	ns := namespaceOf(cfg, target)
 	if err := requireNamespaceGuardConfirmation(a, target, ns); err != nil {
 		return err
@@ -67,8 +66,7 @@ func runShell(a *app, args []string, namespace string) error {
 	}
 	defer func() { _ = session.Remove() }()
 
-	// Sweep idle copies: no hooked terminal removes its own on exit, and a killed
-	// "kctx shell" skips its Remove. Best-effort: never fail the command over it.
+	// Best-effort sweep of idle copies; shellenv.DefaultMaxAge says why they linger.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
 	shellPath := os.Getenv("SHELL")
@@ -224,9 +222,8 @@ func runExec(a *app, target string, argv []string, nsFlag string) error {
 	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
-	// Where the command will actually run, whether -n named it or the context
-	// already pointed there: guarding only the flag would let a context whose
-	// own default is kube-system through unguarded.
+	// Guard the effective namespace, not just -n: a context whose own default is
+	// kube-system would otherwise walk in unguarded.
 	ns := namespaceOf(cfg, target)
 	if err := requireNamespaceGuardConfirmation(a, target, ns); err != nil {
 		return err
@@ -238,10 +235,8 @@ func runExec(a *app, target string, argv []string, nsFlag string) error {
 	}
 	defer func() { _ = session.Remove() }()
 
-	// The badge that "kctx ctx" prints on a switch has no equivalent here, and
-	// running a command against production with no indication of where it is
-	// going is the thing this tool exists to stop. The namespace is named only
-	// when it is the guarded half, so an unremarkable one adds no noise.
+	// exec prints no switch line to carry the badge, so a guarded target is named
+	// here; the namespace only when it is the guarded half.
 	pal := a.palette()
 	ctxBadge, nsBadge := guardSuffix(a, target), namespaceGuardSuffix(a, target, ns)
 	if ctxBadge != "" || nsBadge != "" {
@@ -291,16 +286,11 @@ func waitStatusCode(exitErr *exec.ExitError) int {
 	return 1
 }
 
-// hintPrompt says how to make a managed shell visible in the prompt.
-//
-// The whole value of this command is that the shell is isolated, and nothing
-// about it shows: the prompt renders identically because the session copy
-// names the same context. kube-ctx exports the variables a prompt needs but
-// cannot install them — reaching into $PS1 would fight whatever theme the user
-// already runs — so it says where they are instead.
-//
-// Only on the way into the first managed shell. Nesting already proved the
-// point, and a hint that repeats is a hint people learn to skip.
+// hintPrompt says how to make a managed shell visible in the prompt, which
+// renders identically because the session copy names the same context.
+// kube-ctx exports the variables a prompt needs but never edits $PS1, which
+// would fight the user's theme. Only on the way into the first managed shell:
+// a hint that repeats is one people learn to skip.
 func hintPrompt(a *app, shellPath string) {
 	if shellenv.Depth() > 0 {
 		return

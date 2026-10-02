@@ -87,8 +87,7 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 
 	for _, r := range results {
 		if !r.Healthy() {
-			// ExitUnhealthy, so a script can tell a sick cluster from kctx failing
-			// by $? ("||" fires on both). Silent: the table already said it.
+			// Silent: the report already said it.
 			return &exitError{code: ExitUnhealthy}
 		}
 	}

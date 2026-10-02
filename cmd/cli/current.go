@@ -37,8 +37,8 @@ func runCurrent(a *app, wantNamespace bool) error {
 		return err
 	}
 	if cfg.CurrentContext == "" {
-		// Silent: a prompt calling this on every keystroke should not paint an
-		// error into the user's terminal, it should just print nothing.
+		// Silent: a prompt calls this every time it is drawn, and should print
+		// nothing rather than paint an error into the terminal.
 		return &exitError{code: ExitFailure}
 	}
 

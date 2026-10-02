@@ -14,13 +14,10 @@ import (
 // function under it and calls back through it, so it has to be a name the
 // caller's $PATH resolves.
 //
-// argv[0] rather than os.Executable(): on Linux the latter reads
-// /proc/self/exe, which resolves symlinks. krew installs a plugin as a symlink
-// named kubectl-<plugin> pointing into its own store, and puts only that
-// symlink on $PATH — so the resolved path carries the store's filename and the
-// hook would define a function nothing can call. macOS keeps the symlink and
-// happens to be fine, which is exactly how this would have shipped broken on
-// the platform most kubectl users are on.
+// argv[0] rather than os.Executable(): on Linux the latter resolves symlinks
+// through /proc/self/exe, and krew puts only a kubectl-<plugin> symlink on
+// $PATH, so the hook would define a function nothing can call. macOS keeps the
+// symlink, so testing there never shows it.
 //
 // A variable so tests can pin it; under `go test` argv[0] is the test binary.
 var invokedName = func() string {

@@ -98,10 +98,8 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	if err := requireGuardConfirmation(a, target); err != nil {
 		return err
 	}
-	// The namespace the switch lands in counts as a route to it: nothing runs
-	// here, but everything the user types next runs in whatever this leaves
-	// them standing in. Skipping it left the most-travelled path — switch, then
-	// a bare kubectl — as the one way past a namespace guard.
+	// Gate the namespace the switch lands in: nothing runs here, but everything
+	// typed next does, so switch-then-kubectl would bypass a namespace guard.
 	namespace, err := contexts.Namespace(cfg, target)
 	if err != nil {
 		return err
@@ -183,8 +181,6 @@ func enforceAnswer(a *app, ok bool, err error) error {
 		if _, err := fmt.Fprintln(a.out, "Aborted."); err != nil {
 			return err
 		}
-		// Declining has to be distinguishable from success, or "kctx ctx prod
-		// && ./deploy.sh" deploys against whatever context you were already on.
 		return &exitError{code: ExitAborted}
 	}
 	return nil
