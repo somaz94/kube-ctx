@@ -1,6 +1,7 @@
 package shellenv
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -164,6 +165,56 @@ func TestQuoteEscapesSingleQuotes(t *testing.T) {
 	// A value that would otherwise expand must stay literal.
 	if q := quote(Bash, "$(rm -rf /)"); q != `'$(rm -rf /)'` {
 		t.Errorf("quote = %q", q)
+	}
+}
+
+// fish reads \\ and \' inside single quotes, so a value ending in a backslash
+// left the quote open and the whole env file failed to parse.
+func TestQuoteFishEscapesBackslashesAndQuotes(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{`plain`, `'plain'`},
+		{`a\b`, `'a\\b'`},
+		{`trail\`, `'trail\\'`},
+		{`a'b`, `'a\'b'`},
+		{`a\'b`, `'a\\\'b'`},
+	}
+	for _, tt := range tests {
+		if got := quote(Fish, tt.in); got != tt.want {
+			t.Errorf("quote(fish, %q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// Each shell has its own quoting rules, so the proof is the shell reading its
+// own export back. Shells that are not installed are skipped.
+func TestExportLineRoundTripsThroughRealShells(t *testing.T) {
+	shells := []struct {
+		sh   Shell
+		argv []string
+	}{
+		{Bash, []string{"bash", "--norc", "--noprofile", "-c"}},
+		{Zsh, []string{"zsh", "-f", "-c"}},
+		{Fish, []string{"fish", "--no-config", "-c"}},
+	}
+	values := []string{`plain`, `a\b`, `a\\b`, `trail\`, `a'b`, `a\'b`, `$(echo pwned)`, "`echo pwned`"}
+
+	for _, s := range shells {
+		t.Run(string(s.sh), func(t *testing.T) {
+			if _, err := exec.LookPath(s.argv[0]); err != nil {
+				t.Skipf("%s is not installed", s.argv[0])
+			}
+			for _, v := range values {
+				script := exportLine(s.sh, "KCTX_QUOTE_TEST", v) + `; printf '%s' "$KCTX_QUOTE_TEST"`
+				out, err := exec.Command(s.argv[0], append(s.argv[1:], script)...).CombinedOutput()
+				if err != nil {
+					t.Errorf("%q: %v\n%s", v, err, out)
+					continue
+				}
+				if string(out) != v {
+					t.Errorf("%q came back as %q", v, out)
+				}
+			}
+		})
 	}
 }
 

@@ -47,9 +47,13 @@ func exportLine(sh Shell, key, value string) string {
 	return fmt.Sprintf("export %s=%s", key, quote(sh, value))
 }
 
-// quote makes value safe to embed in a shell script. Single quotes disable
-// every expansion, and an embedded single quote is closed, escaped, reopened.
+// quote makes value safe to embed in a shell script. Single quotes stop every
+// expansion; fish still reads \\ and \' inside them, so it escapes those too.
 func quote(sh Shell, value string) string {
+	if sh == Fish {
+		value = strings.ReplaceAll(value, `\`, `\\`)
+		return "'" + strings.ReplaceAll(value, "'", `\'`) + "'"
+	}
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
