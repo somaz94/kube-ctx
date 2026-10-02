@@ -7,9 +7,10 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"unicode/utf8"
+	"unicode"
 
 	"golang.org/x/term"
+	"golang.org/x/text/width"
 )
 
 // ANSI SGR sequences, kept as constants so color needs no library dependency.
@@ -95,9 +96,23 @@ func IsTerminal(w io.Writer) bool {
 // calculations.
 var ansiPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-// VisibleWidth returns the printed width of s, ignoring color escapes.
+// VisibleWidth returns the printed width of s, ignoring color escapes. Wide
+// and fullwidth characters take two columns and combining marks none, as a
+// terminal draws them; a rune count misaligned every column after a Korean
+// or Japanese context name.
 func VisibleWidth(s string) int {
-	return utf8.RuneCountInString(ansiPattern.ReplaceAllString(s, ""))
+	n := 0
+	for _, r := range ansiPattern.ReplaceAllString(s, "") {
+		switch {
+		case unicode.In(r, unicode.Mn, unicode.Me):
+		case width.LookupRune(r).Kind() == width.EastAsianWide,
+			width.LookupRune(r).Kind() == width.EastAsianFullwidth:
+			n += 2
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 // Table writes headers and rows as an aligned, two-space-separated table.

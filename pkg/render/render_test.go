@@ -115,6 +115,26 @@ func TestTable(t *testing.T) {
 	}
 }
 
+func TestTableAlignsWideCharacters(t *testing.T) {
+	var buf bytes.Buffer
+	err := Table(&buf, []string{"NAME", "NAMESPACE"}, [][]string{
+		{"개발", "default"},
+		{"production", "monitoring"},
+	})
+	if err != nil {
+		t.Fatalf("Table: %v", err)
+	}
+
+	// Spelled out rather than measured: measuring with VisibleWidth would
+	// agree with whatever VisibleWidth gets wrong. 개발 is four columns wide.
+	want := "NAME        NAMESPACE\n" +
+		"개발        default\n" +
+		"production  monitoring\n"
+	if buf.String() != want {
+		t.Errorf("got\n%s\nwant\n%s", buf.String(), want)
+	}
+}
+
 func TestTableAlignsColorizedCells(t *testing.T) {
 	pal := NewEnabled(true)
 
@@ -149,6 +169,11 @@ func TestVisibleWidth(t *testing.T) {
 		{"abc", 3},
 		{pal.Bold("abc"), 3},
 		{pal.Red(pal.Bold("ab")), 2},
+		{"개발", 4},
+		{pal.Bold("dev-운영"), 8},
+		{"ｐｒｏｄ", 8},
+		{"日本", 4},
+		{"e\u0301", 1},
 	}
 	for _, tt := range tests {
 		if got := VisibleWidth(tt.in); got != tt.want {
