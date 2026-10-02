@@ -299,6 +299,26 @@ func TestMalformedClientCert(t *testing.T) {
 	}
 }
 
+func TestCertExpirySkipsANonCertificateBlock(t *testing.T) {
+	notAfter := time.Now().Add(24 * time.Hour).Truncate(time.Second)
+	preamble := []byte("-----BEGIN TRUSTED CERTIFICATE-----\nZ2FyYmFnZQ==\n-----END TRUSTED CERTIFICATE-----\n")
+
+	_, _, expiry, err := inspectAuth(&clientcmdapi.AuthInfo{ClientCertificateData: append(preamble, makeCert(t, notAfter)...)})
+	if err != nil {
+		t.Fatalf("inspectAuth: %v; a leading non-certificate block made the cluster sick", err)
+	}
+	if expiry == nil || !expiry.Equal(notAfter.UTC()) {
+		t.Errorf("expiry = %v, want %v", expiry, notAfter.UTC())
+	}
+}
+
+func TestCertExpiryRejectsPEMWithNoCertificate(t *testing.T) {
+	key := []byte("-----BEGIN EC PRIVATE KEY-----\nZ2FyYmFnZQ==\n-----END EC PRIVATE KEY-----\n")
+	if _, _, _, err := inspectAuth(&clientcmdapi.AuthInfo{ClientCertificateData: key}); err == nil {
+		t.Error("a PEM carrying no certificate was accepted")
+	}
+}
+
 func TestTokenExpiry(t *testing.T) {
 	exp := time.Now().Add(time.Hour).Truncate(time.Second)
 

@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -288,15 +289,24 @@ func inspectAuth(authInfo *clientcmdapi.AuthInfo) (AuthKind, string, *time.Time,
 
 // certExpiry reads notAfter out of a PEM-encoded client certificate.
 func certExpiry(pemData []byte) (*time.Time, error) {
-	block, _ := pem.Decode(pemData)
-	if block == nil {
-		return nil, fmt.Errorf("client certificate is not valid PEM")
+	for remaining := pemData; len(remaining) > 0; {
+		var block *pem.Block
+		block, remaining = pem.Decode(remaining)
+		if block == nil {
+			break
+		}
+		// The first CERTIFICATE block, not merely the first block: a file that
+		// leads with a TRUSTED CERTIFICATE would otherwise call the cluster sick.
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("client certificate is unparseable: %w", err)
+		}
+		return &cert.NotAfter, nil
 	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("client certificate is unparseable: %w", err)
-	}
-	return &cert.NotAfter, nil
+	return nil, errors.New("client certificate holds no PEM-encoded CERTIFICATE block")
 }
 
 // tokenExpiry reads the exp claim of a JWT.
