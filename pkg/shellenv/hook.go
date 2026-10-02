@@ -62,9 +62,8 @@ func quote(sh Shell, value string) string {
 //
 // A child process cannot change its parent's environment, so the binary writes
 // the exports it wants to a file and this wrapper sources them. The file path
-// is passed in an environment variable rather than parsed out of stdout: the
-// picker draws on the same terminal, and mixing UI with code to evaluate is how
-// that kind of integration breaks.
+// is passed in an environment variable rather than parsed out of stdout,
+// because the picker draws on the same terminal.
 func Hook(sh Shell, binary string) string {
 	if binary == "" {
 		binary = "kctx"
@@ -117,9 +116,8 @@ __kctx_chpwd
 //
 // zsh has a first-class hook for it. bash has none, so PROMPT_COMMAND stands in
 // — it fires before every prompt rather than on every cd, which is why the
-// function compares $PWD itself. Appending is guarded because sourcing the hook
-// twice (a nested shell, a re-sourced rc file) would otherwise run it twice per
-// prompt.
+// function compares $PWD itself. Both installs are guarded: sourcing the hook
+// twice (a nested shell, a re-sourced rc file) would otherwise register it twice.
 func chpwdInstall(sh Shell) string {
 	if sh == Zsh {
 		return `typeset -ag chpwd_functions

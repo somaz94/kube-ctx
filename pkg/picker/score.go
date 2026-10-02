@@ -121,8 +121,7 @@ func Score(query, target string) (int, []int, bool) {
 		prev, cur = cur, prev
 	}
 
-	// The best full match is the highest-scoring end position of the last
-	// query character.
+	// prev holds the last query character's row now; its best entry is the match.
 	best, bestAt := noMatch, -1
 	for j := range t {
 		if prev[j] > best {

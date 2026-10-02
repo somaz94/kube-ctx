@@ -49,7 +49,7 @@ func NewModel(items []Item, height int) *Model {
 // Query returns the current search text.
 func (m *Model) Query() string { return m.query }
 
-// Matches returns the currently visible-eligible matches, best first.
+// Matches returns every match for the current query, best first.
 func (m *Model) Matches() []Match { return m.matches }
 
 // Cursor returns the index into Matches of the highlighted row.

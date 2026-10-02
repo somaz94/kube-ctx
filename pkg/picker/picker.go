@@ -65,8 +65,8 @@ func NewTTY(prompt string) (*Picker, func() error, error) {
 
 	height := defaultHeight
 	if _, rows, err := term.GetSize(fd); err == nil && rows > 0 {
-		// Leave room for the prompt line, the counter line, and the shell
-		// prompt that returns afterwards.
+		// Four rows besides the items: the prompt and counter lines, the line the
+		// trailing newline leaves the cursor on, and the command line above.
 		if usable := rows - 4; usable < height {
 			height = max(usable, 1)
 		}

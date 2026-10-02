@@ -10,7 +10,7 @@ import (
 	"github.com/somaz94/kube-ctx/internal/testutil"
 )
 
-// isolate points the state directory at a temp dir.
+// isolate points the state directory at a temp dir and returns the sessions dir.
 func isolate(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -102,7 +102,7 @@ func TestRemoveDeletesConfigAndHistory(t *testing.T) {
 		t.Error("Remove deleted the global history")
 	}
 
-	// Removing twice is not an error: a shell may exit after a GC sweep.
+	// Removing twice is not an error: a "kctx shell" may exit after a GC sweep took its copy.
 	if err := s.Remove(); err != nil {
 		t.Errorf("second Remove: %v", err)
 	}
@@ -330,8 +330,6 @@ func TestListReportsSessions(t *testing.T) {
 	for _, info := range list {
 		byID[info.ID] = info
 	}
-	// The context is read back out of the copy, since the shell that owns it
-	// switches in there and the file is the only record of where it ended up.
 	if got := byID[second.ID]; got.Context != "prod" || !got.Current {
 		t.Errorf("second = %+v, want prod and current", got)
 	}
@@ -371,7 +369,7 @@ func TestTouchKeepsALiveSessionFromBeingSwept(t *testing.T) {
 		t.Fatalf("chtimes: %v", err)
 	}
 
-	// Outside a session there is nothing to touch, and the sweep takes it.
+	// Outside a session Touch is a no-op, not an error.
 	if err := Touch(); err != nil {
 		t.Fatalf("Touch outside a session: %v", err)
 	}

@@ -124,8 +124,6 @@ func (s *Session) Remove() error {
 	if err != nil {
 		return err
 	}
-	// History files are scoped by session ID; a session that ends takes its
-	// context and namespace history with it.
 	matches, err := filepath.Glob(filepath.Join(state, "history-"+s.ID+"*"))
 	if err != nil {
 		return err
@@ -232,7 +230,7 @@ func Touch() error {
 	return os.Chtimes(path, now, now)
 }
 
-// GC removes session kubeconfigs older than maxAge, along with their history.
+// GC removes session kubeconfigs unused for maxAge, along with their history.
 //
 // It is best-effort: a file that cannot be removed is skipped rather than
 // failing the command the user actually asked for.
