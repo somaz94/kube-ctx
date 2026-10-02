@@ -166,7 +166,7 @@ kctx alias p prod-eks-apne2    # set
 kctx alias --delete p          # remove
 ```
 
-An alias works anywhere a context name does — `kctx ctx p`, `kctx exec p -- ...`, `kctx shell p`. Prefix it with `@` to force the alias reading when a context of the same name also exists.
+An alias works anywhere a context name does — `kctx ctx p`, `kctx exec p -- ...`, `kctx shell p`. Prefix it with `@` to force the alias reading when a context of the same name also exists. A context whose own name starts with `@` is reached as typed when no alias claims that name, and with a doubled `@@` when one does.
 
 <br/>
 

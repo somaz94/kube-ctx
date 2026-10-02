@@ -66,6 +66,11 @@ func resolveContext(a *app, cfg *clientcmdapi.Config, name string) (string, erro
 	if strings.HasPrefix(name, "@") || !contexts.Exists(cfg, name) {
 		target = userCfg.ResolveAlias(name)
 	}
+	// A context may itself be named "@team", and completion offers it as typed.
+	// With no alias to force, that name can only mean the context.
+	if !contexts.Exists(cfg, target) && contexts.Exists(cfg, name) {
+		target = name
+	}
 	if !contexts.Exists(cfg, target) {
 		// Report what the user typed, not what the alias expanded to: being
 		// told that "prod-eks-apne2" does not exist when you typed "p" is a

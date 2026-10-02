@@ -254,6 +254,34 @@ func TestBareNamePrefersContextAndAtForcesAlias(t *testing.T) {
 	}
 }
 
+// kubeconfig allows a context name to start with "@". Read only as a forced
+// alias, such a context was unreachable even though completion offered it.
+func TestContextNamedWithALeadingAt(t *testing.T) {
+	h := newHarness(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{
+		{Name: "dev"}, {Name: "prod"}, {Name: "@team"},
+	}})
+
+	if err := h.run("ctx", "@team"); err != nil {
+		t.Fatalf("ctx @team with no alias named team: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "@team" {
+		t.Errorf("current = %q, want @team", got)
+	}
+
+	// An alias still wins the "@" form, and "@@" still names the context.
+	if err := h.run("alias", "team", "prod"); err != nil {
+		t.Fatalf("alias: %v", err)
+	}
+	for _, tt := range []struct{ arg, want string }{{"@team", "prod"}, {"@@team", "@team"}} {
+		if err := h.run("ctx", tt.arg); err != nil {
+			t.Fatalf("ctx %s: %v", tt.arg, err)
+		}
+		if got := h.config().CurrentContext; got != tt.want {
+			t.Errorf("ctx %s landed on %q, want %q", tt.arg, got, tt.want)
+		}
+	}
+}
+
 func TestCtxSwitchToCurrentKeepsHistory(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
