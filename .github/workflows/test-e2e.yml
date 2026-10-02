@@ -17,18 +17,23 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   test-e2e:
     name: E2E Suite
-    # Fork PRs wait for a maintainer's /ok-to-test, which applies the label.
+    # Fork PRs run once the ok-to-test label is on them: added by hand, or by
+    # /ok-to-test, whose GITHUB_TOKEN label starts no run and so counts from the
+    # next push. Any other label is no reason to run: each one dependabot
+    # attaches fired a run that cancelled the one before it.
     if: >
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository ||
-      contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+      (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test') &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository ||
+       contains(github.event.pull_request.labels.*.name, 'ok-to-test'))
+    # On the job, not the workflow: a run whose job the condition above skips
+    # would still join a workflow-level group and cancel the run in progress.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
