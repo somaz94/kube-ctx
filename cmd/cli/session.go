@@ -32,15 +32,15 @@ func (a *app) historyScope() string {
 // guardSessionScoped refuses a durable kubeconfig edit attempted from inside a
 // kube-ctx-managed shell.
 //
-// In one of those, $KUBECONFIG points at a private copy nothing reads once the
-// shell exits, so the edit would report success and then be lost. A switch
+// In one of those, $KUBECONFIG points at a private copy, so the edit would
+// report success and never reach the kubeconfig other terminals read. A switch
 // being shell-local is the whole point; an edit meant to outlive it is not.
 func guardSessionScoped(op string) error {
 	if !shellenv.Active() {
 		return nil
 	}
 	return fmt.Errorf("%s would edit this shell's private kubeconfig copy (session %s), "+
-		"which nothing reads once the shell is gone; run it from a terminal without a kube-ctx session",
+		"which other terminals never read; run it from a terminal without a kube-ctx session",
 		op, os.Getenv(EnvShellID))
 }
 

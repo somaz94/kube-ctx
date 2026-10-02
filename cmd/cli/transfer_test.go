@@ -245,8 +245,8 @@ func TestImportMissingFile(t *testing.T) {
 	}
 }
 
-// Inside a managed shell $KUBECONFIG is a copy nothing reads once the shell is
-// gone, so an import would report success and have no effect.
+// Inside a managed shell $KUBECONFIG is a copy other terminals never read, so an
+// import would report success without reaching the real kubeconfig.
 func TestImportRefusedInsideASession(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	src := writeSource(t, h, "downloaded.yaml", foreignSpec())

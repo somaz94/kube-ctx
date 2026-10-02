@@ -483,9 +483,8 @@ func TestRenameBacksUpKubeconfig(t *testing.T) {
 	}
 }
 
-// Inside a kube-ctx-managed shell $KUBECONFIG is a private copy nothing reads
-// once the shell is gone. A rename or delete there would report success and
-// have no effect, so both must refuse rather than quietly no-op.
+// Inside a managed shell $KUBECONFIG is a copy other terminals never read, so a
+// rename or delete would report success without reaching the real kubeconfig.
 func TestDurableEditsRefuseInsideAManagedShell(t *testing.T) {
 	tests := []struct {
 		name string

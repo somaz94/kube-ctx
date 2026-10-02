@@ -218,10 +218,10 @@ Durable edits — the commands that change the kubeconfig rather than switch wit
 ```console
 $ kctx delete staging
 Error: delete would edit this shell's private kubeconfig copy (session 83cc09ccfef7),
-which nothing reads once the shell is gone; run it from a terminal without a kube-ctx session
+which other terminals never read; run it from a terminal without a kube-ctx session
 ```
 
-There, `$KUBECONFIG` is the private copy, so the edit would land in a file nothing reads once the shell is gone — reporting success and then having no effect. Switching contexts is shell-local on purpose; an edit meant to outlive the shell is not. Run these from a terminal without a kube-ctx session: a new one, before its first switch.
+There, `$KUBECONFIG` is the private copy, so the edit would land in a file other terminals never read — reporting success without ever reaching your kubeconfig. Switching contexts is shell-local on purpose; an edit meant to outlive the shell is not. Run these from a terminal without a kube-ctx session: a new one, before its first switch.
 
 <br/>
 

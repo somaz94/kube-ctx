@@ -283,9 +283,9 @@ without asking — they are the release pipeline.
   macOS keeps the symlink and looks fine, which is how this would have shipped
   broken on the platform most kubectl users are on.
 - **Durable edits are refused in a session** — inside a managed shell
-  `$KUBECONFIG` is a copy nothing reads once the shell is gone, so `rename`,
-  `delete` and `import` stop at `guardSessionScoped` (`cmd/cli/session.go`)
-  rather than reporting a success that has no effect. Switching is meant to be
+  `$KUBECONFIG` is a copy other terminals never read, so `rename`, `delete` and
+  `import` stop at `guardSessionScoped` (`cmd/cli/session.go`) rather than
+  reporting a success that never reaches the real kubeconfig. Switching is meant to be
   shell-local; an edit is not.
 
 <br/>
