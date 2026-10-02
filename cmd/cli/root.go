@@ -50,6 +50,12 @@ type app struct {
 	// rather than restarting from a drained reader.
 	prompts *bufio.Reader
 
+	// sessionID is the session this command opened on a hooked shell's first
+	// switch. The shell adopts it only once the command exits, so until then
+	// $KUBE_CTX_SHELL_ID is empty, and the history the switch records would
+	// land in the global stack while the next "-" reads the session's.
+	sessionID string
+
 	// compiled memoizes the guard rules for one command: callers classify per
 	// item (a fan-out asks per target and again per result), and no command
 	// writes guard rules and then classifies.

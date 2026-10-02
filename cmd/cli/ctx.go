@@ -72,7 +72,7 @@ func runCtx(a *app, args []string, back int) error {
 // picker when no target was given.
 func resolveContextArg(a *app, cfg *clientcmdapi.Config, args []string, back int) (string, error) {
 	if back = historyRef(args, back); back > 0 {
-		history, err := contexts.NewHistory(historyScope())
+		history, err := contexts.NewHistory(a.historyScope())
 		if err != nil {
 			return "", err
 		}
@@ -119,7 +119,7 @@ func switchContext(a *app, cfg *clientcmdapi.Config, target string) error {
 	}
 
 	if previous != target {
-		history, err := contexts.NewHistory(historyScope())
+		history, err := contexts.NewHistory(a.historyScope())
 		if err != nil {
 			return err
 		}

@@ -346,6 +346,66 @@ func TestHookModeKeepsTheGlobalKubeconfigIntact(t *testing.T) {
 	}
 }
 
+// sourceExports does what the hook does with the env file: applies its exports
+// to this process, then empties it for the next command.
+func sourceExports(t *testing.T, envFile string) {
+	t.Helper()
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatalf("read env file: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		key, value, ok := strings.Cut(strings.TrimPrefix(line, "export "), "=")
+		if !ok {
+			t.Fatalf("unexpected export line %q", line)
+		}
+		t.Setenv(key, strings.Trim(value, "'"))
+	}
+	if err := os.Truncate(envFile, 0); err != nil {
+		t.Fatalf("truncate env file: %v", err)
+	}
+}
+
+// The first switch creates the session, and the history it records has to land
+// in that session: the next "-" is read from there. Recorded globally, "kctx
+// ctx X; kctx ctx -" failed in every freshly opened terminal.
+func TestHookModeFirstSwitchRecordsHistoryInTheNewSession(t *testing.T) {
+	tests := []struct {
+		name          string
+		first, second []string
+		check         func(*testing.T, string)
+	}{
+		{"context", []string{"ctx", "prod"}, []string{"ctx", "-"}, func(t *testing.T, path string) {
+			if got := testutil.Read(t, path).CurrentContext; got != "dev" {
+				t.Errorf("session current-context = %q, want dev", got)
+			}
+		}},
+		{"namespace", []string{"ns", "kube-system"}, []string{"ns", "-"}, func(t *testing.T, path string) {
+			if got := testutil.Read(t, path).Contexts["dev"].Namespace; got != "default" {
+				t.Errorf("session namespace = %q, want default", got)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			t.Setenv(shellenv.EnvShell, "bash")
+			envFile := filepath.Join(t.TempDir(), "env")
+			t.Setenv(shellenv.EnvFile, envFile)
+
+			if err := h.run(tt.first...); err != nil {
+				t.Fatalf("%v: %v", tt.first, err)
+			}
+			sourceExports(t, envFile)
+
+			if err := h.run(tt.second...); err != nil {
+				t.Fatalf("%v right after the first switch: %v", tt.second, err)
+			}
+			tt.check(t, os.Getenv("KUBECONFIG"))
+		})
+	}
+}
+
 func TestHookModeSecondSwitchWritesToTheSession(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	t.Setenv(shellenv.EnvShell, "bash")

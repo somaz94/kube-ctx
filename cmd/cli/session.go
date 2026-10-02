@@ -22,7 +22,10 @@ const (
 // Inside a kube-ctx-managed shell each terminal has its own current context, so
 // "back one context" must mean "back one in *this* terminal". Outside one, the
 // context is global and so is the history.
-func historyScope() string {
+func (a *app) historyScope() string {
+	if a.sessionID != "" {
+		return a.sessionID
+	}
 	return os.Getenv(EnvShellID)
 }
 
@@ -65,6 +68,7 @@ func startShellSession(a *app, cfg *clientcmdapi.Config, target string) (bool, e
 		_ = session.Remove()
 		return false, fmt.Errorf("write shell environment: %w", err)
 	}
+	a.sessionID = session.ID
 	return true, nil
 }
 

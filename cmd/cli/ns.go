@@ -58,7 +58,7 @@ func runNs(a *app, args []string, back int, refresh bool, timeout time.Duration)
 		return fmt.Errorf("no current context is set; run \"kctx ctx <name>\" first")
 	}
 
-	target, err := resolveNamespaceArg(cfg, args, back)
+	target, err := resolveNamespaceArg(a, cfg, args, back)
 	if err != nil {
 		return err
 	}
@@ -102,9 +102,9 @@ func chooseNamespace(a *app, cfg *clientcmdapi.Config, refresh bool, timeout tim
 
 // resolveNamespaceArg turns the command line into a namespace name, or "" when
 // the user gave no target.
-func resolveNamespaceArg(cfg *clientcmdapi.Config, args []string, back int) (string, error) {
+func resolveNamespaceArg(a *app, cfg *clientcmdapi.Config, args []string, back int) (string, error) {
 	if back = historyRef(args, back); back > 0 {
-		history, err := nsHistory(cfg.CurrentContext)
+		history, err := nsHistory(a, cfg.CurrentContext)
 		if err != nil {
 			return "", err
 		}
@@ -135,7 +135,7 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 	}
 
 	if previous != target {
-		history, err := nsHistory(cfg.CurrentContext)
+		history, err := nsHistory(a, cfg.CurrentContext)
 		if err != nil {
 			return err
 		}
@@ -200,9 +200,9 @@ func fetchNamespaces(a *app, ctxName string, refresh bool, timeout time.Duration
 }
 
 // nsHistory returns the namespace history stack for one context.
-func nsHistory(ctxName string) (*contexts.History, error) {
+func nsHistory(a *app, ctxName string) (*contexts.History, error) {
 	scope := nsHistoryPrefix + ctxName
-	if shell := historyScope(); shell != "" {
+	if shell := a.historyScope(); shell != "" {
 		scope = shell + "-" + scope
 	}
 	return contexts.NewHistory(scope)
