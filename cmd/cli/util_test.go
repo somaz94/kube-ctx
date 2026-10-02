@@ -242,6 +242,38 @@ func TestCompleteNamespacesWithoutCurrentContext(t *testing.T) {
 	}
 }
 
+// -n names a namespace in the context the command acts on, so that context's
+// namespaces are the ones to offer — not the current context's, and not none
+// once a context argument has been typed.
+func TestNamespaceFlagCompletesTheTargetContext(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		want, not string
+	}{
+		{"exec", []string{"exec", "prod", "-n", ""}, "payments", "kube-system"},
+		{"shell", []string{"shell", "prod", "-n", ""}, "payments", "kube-system"},
+		{"guard add", []string{"guard", "add", "prod", "-n", ""}, "payments", "kube-system"},
+		{"alias", []string{"exec", "p", "-n", ""}, "payments", "kube-system"},
+		{"no context argument", []string{"exec", "--all", "-n", ""}, "kube-system", "payments"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			seedNamespaceCache(t, "dev", "default", "kube-system")
+			seedNamespaceCache(t, "prod", "monitoring", "payments")
+			writeUserConfig(t, "aliases:\n  p: prod\n")
+
+			if err := h.run(append([]string{"__complete"}, tt.args...)...); err != nil {
+				t.Fatalf("__complete: %v", err)
+			}
+			if !strings.Contains(h.stdout(), tt.want) || strings.Contains(h.stdout(), tt.not) {
+				t.Errorf("completions = %q, want %s and not %s", h.stdout(), tt.want, tt.not)
+			}
+		})
+	}
+}
+
 func TestAliasListRendersTable(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 

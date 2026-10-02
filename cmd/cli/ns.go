@@ -82,7 +82,7 @@ func runNs(a *app, args []string, back int, refresh bool, timeout time.Duration)
 // chooseNamespace opens the picker over the namespaces of the current context.
 // When no terminal is available it prints the list instead and returns "".
 func chooseNamespace(a *app, cfg *clientcmdapi.Config, refresh bool, timeout time.Duration) (string, error) {
-	result, err := fetchNamespaces(a, cfg, refresh, timeout)
+	result, err := fetchNamespaces(a, cfg.CurrentContext, refresh, timeout)
 	if err != nil {
 		return "", err
 	}
@@ -177,9 +177,9 @@ func warnIfStale(a *app, result namespaces.Result) {
 	}
 }
 
-// fetchNamespaces retrieves the namespace list for the current context.
-func fetchNamespaces(a *app, cfg *clientcmdapi.Config, refresh bool, timeout time.Duration) (namespaces.Result, error) {
-	rc, err := a.loader().RestConfig(cfg.CurrentContext)
+// fetchNamespaces retrieves the namespace list for one context.
+func fetchNamespaces(a *app, ctxName string, refresh bool, timeout time.Duration) (namespaces.Result, error) {
+	rc, err := a.loader().RestConfig(ctxName)
 	if err != nil {
 		return namespaces.Result{}, err
 	}
@@ -187,7 +187,7 @@ func fetchNamespaces(a *app, cfg *clientcmdapi.Config, refresh bool, timeout tim
 	ctx, cancel := contextWithTimeout(timeout)
 	defer cancel()
 
-	result := namespaces.Fetch(ctx, cfg.CurrentContext, namespaces.Live(rc), namespaces.Options{Refresh: refresh})
+	result := namespaces.Fetch(ctx, ctxName, namespaces.Live(rc), namespaces.Options{Refresh: refresh})
 	if len(result.Namespaces) == 0 && result.Err != nil {
 		return result, fmt.Errorf("list namespaces: %w", result.Err)
 	}
@@ -206,10 +206,10 @@ func nsHistory(ctxName string) (*contexts.History, error) {
 // registerNamespaceFlagCompletion wires -n to the namespace list. Best-effort:
 // a completion that fails to register is not worth failing a command over.
 func registerNamespaceFlagCompletion(a *app, cmd *cobra.Command) {
-	_ = cmd.RegisterFlagCompletionFunc("namespace", completeNamespaces(a))
+	_ = cmd.RegisterFlagCompletionFunc("namespace", completeNamespaceFlag(a))
 }
 
-// completeNamespaces provides shell completion from the namespace cache.
+// completeNamespaces completes the one argument "kctx ns" takes.
 func completeNamespaces(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) > 0 {
@@ -219,10 +219,37 @@ func completeNamespaces(a *app) func(*cobra.Command, []string, string) ([]string
 		if err != nil || cfg.CurrentContext == "" {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		result, err := fetchNamespaces(a, cfg, false, 2*time.Second)
+		return namespaceCompletions(a, cfg.CurrentContext)
+	}
+}
+
+// completeNamespaceFlag completes -n against the context the command acts on:
+// its context argument when one names a context, else the current one. The
+// positional args are that context, not namespaces already typed.
+func completeNamespaceFlag(a *app) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		cfg, err := a.loader().Load()
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		return result.Namespaces, cobra.ShellCompDirectiveNoFileComp
+		target := cfg.CurrentContext
+		if len(args) > 0 {
+			if name, err := resolveContext(a, cfg, args[0]); err == nil {
+				target = name
+			}
+		}
+		if target == "" {
+			return nil, cobra.ShellCompDirectiveError
+		}
+		return namespaceCompletions(a, target)
 	}
+}
+
+// namespaceCompletions offers the namespaces of one context, cache first.
+func namespaceCompletions(a *app, ctxName string) ([]string, cobra.ShellCompDirective) {
+	result, err := fetchNamespaces(a, ctxName, false, 2*time.Second)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveError
+	}
+	return result.Namespaces, cobra.ShellCompDirectiveNoFileComp
 }
