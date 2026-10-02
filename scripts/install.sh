@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Installer script
-# Usage: curl -sSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/somaz94/kube-ctx/main/scripts/install.sh | bash
 #
 # Set INSTALL_DIR to install somewhere else — useful for a directory you own,
 # which avoids the sudo the default requires:
-#   curl -sSL .../install.sh | INSTALL_DIR="$HOME/.local/bin" bash
+#   curl -fsSL .../install.sh | INSTALL_DIR="$HOME/.local/bin" bash
 
 REPO="somaz94/kube-ctx"
 # The release archive is named after the project, the binary inside it after
@@ -43,10 +43,13 @@ detect_platform() {
 }
 
 get_latest_version() {
-  VERSION=$(curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-  if [ -z "$VERSION" ]; then
-    fail "Could not determine latest version"
-  fi
+  local json
+  json=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest") \
+    || fail "GitHub API request failed (rate-limited?)"
+  # sed -n ... p prints nothing without a complete "v" tag, where grep | sed
+  # passed the whole line through, or ended the script silently under pipefail.
+  VERSION=$(printf '%s\n' "$json" | sed -nE 's/.*"tag_name": *"v([^"]+)".*/\1/p')
+  [ -n "$VERSION" ] || fail "Could not determine latest version"
 }
 
 main() {
@@ -66,10 +69,10 @@ main() {
   trap 'rm -rf "$TMP_DIR"' EXIT
 
   info "Downloading ${ARCHIVE}..."
-  curl -sSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${ARCHIVE}" || fail "Download failed: ${DOWNLOAD_URL}"
+  curl -fsSL "$DOWNLOAD_URL" -o "${TMP_DIR}/${ARCHIVE}" || fail "Download failed: ${DOWNLOAD_URL}"
 
   info "Extracting..."
-  tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
+  tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR" || fail "Could not extract ${ARCHIVE}"
 
   info "Installing to ${INSTALL_DIR}/${BINARY}..."
   # chmod goes in the same branch as the move: after a sudo mv the file can be
