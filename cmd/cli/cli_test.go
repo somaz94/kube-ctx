@@ -17,7 +17,6 @@ import (
 	"github.com/somaz94/kube-ctx/internal/testutil"
 	"github.com/somaz94/kube-ctx/pkg/picker"
 	"github.com/somaz94/kube-ctx/pkg/render"
-	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
 // harness is one isolated CLI invocation: its own kubeconfig, its own config
@@ -43,9 +42,13 @@ func newHarness(t *testing.T, spec testutil.Spec) *harness {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "state"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	t.Setenv("NO_COLOR", "1")
-	t.Setenv(EnvShellID, "")
-	t.Setenv(shellenv.EnvFile, "")
-	t.Setenv(shellenv.EnvShell, "")
+	// Run from a managed terminal, the suite inherits its session, binding and
+	// depth, and every test would start inside a shell it did not set up.
+	for _, entry := range os.Environ() {
+		if key, _, _ := strings.Cut(entry, "="); strings.HasPrefix(key, "KUBE_CTX_") {
+			t.Setenv(key, "")
+		}
+	}
 
 	// Tests must never reach for the real terminal: a test binary launched
 	// from a shell has a usable /dev/tty, and the picker would block forever

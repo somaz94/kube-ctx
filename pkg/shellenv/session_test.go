@@ -312,6 +312,7 @@ func TestListWithoutASessionDirectory(t *testing.T) {
 // Touch a terminal open past the sweep window loses its kubeconfig mid-use.
 func TestTouchKeepsALiveSessionFromBeingSwept(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(EnvShellID, "")
 	cfg := testutil.Config(testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev"}}})
 
 	session, err := New(cfg, "dev")
