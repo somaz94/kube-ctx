@@ -51,6 +51,13 @@ jobs:
         with:
           version: latest
 
+      # The hook's export quoting is proven by each shell reading its own line
+      # back. A missing shell is skipped, not failed, so the install is strict.
+      - name: Install the shells the hook is generated for
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends zsh fish
+
       - name: Run tests with coverage
         run: go test ./... -v -race -cover -coverprofile=coverage.out
 

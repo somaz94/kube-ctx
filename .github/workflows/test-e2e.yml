@@ -49,13 +49,12 @@ jobs:
       - name: Build binary
         run: make build
 
-      # Wrong-shell exports only fail when a real shell sources them.
-      # A missing shell is skipped, not failed, so fish is best-effort.
+      # Wrong-shell exports only fail when a real shell sources them. A missing
+      # shell is skipped, not failed, so the install is strict.
       - name: Install the shells the hook is generated for
         run: |
           sudo apt-get update
-          sudo apt-get install -y zsh
-          sudo apt-get install -y fish || echo "fish unavailable; the suite will skip it"
+          sudo apt-get install -y --no-install-recommends zsh fish
 
       - name: Install kind
         run: |
