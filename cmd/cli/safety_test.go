@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/somaz94/kube-ctx/internal/testutil"
 	"github.com/somaz94/kube-ctx/pkg/config"
 	"github.com/somaz94/kube-ctx/pkg/guard"
+	"github.com/somaz94/kube-ctx/pkg/render"
 	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
@@ -164,11 +166,25 @@ func TestOutputFormatIsValidated(t *testing.T) {
 // time while doing nothing at all.
 func TestPlainOutputHasNoEscapes(t *testing.T) {
 	h := newHarness(t, defaultSpec())
-	if err := h.run("list", "-o", "plain"); err != nil {
-		t.Fatalf("list -o plain: %v", err)
+	// Over a buffer, with NO_COLOR set by the harness, color is off no matter
+	// what -o says; a terminal has to be stood in for this to be able to fail.
+	original := newPalette
+	newPalette = func(_ io.Writer, forceNoColor bool) render.Palette { return render.NewEnabled(!forceNoColor) }
+	t.Cleanup(func() { newPalette = original })
+
+	if err := h.run("list"); err != nil {
+		t.Fatalf("list: %v", err)
 	}
-	if strings.Contains(h.stdout(), "\x1b[") {
-		t.Errorf("plain output carries ANSI escapes: %q", h.stdout())
+	if !strings.Contains(h.stdout(), "\x1b[") {
+		t.Fatalf("the stand-in terminal got no color, so the checks below prove nothing: %q", h.stdout())
+	}
+	for _, args := range [][]string{{"list", "-o", "plain"}, {"list", "--no-color"}} {
+		if err := h.run(args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if strings.Contains(h.stdout(), "\x1b[") {
+			t.Errorf("%v carries ANSI escapes: %q", args, h.stdout())
+		}
 	}
 }
 

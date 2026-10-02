@@ -87,8 +87,12 @@ const (
 // "-o plain" is the same request as --no-color; treating them separately is
 // how the flag came to be documented and do nothing.
 func (a *app) palette() render.Palette {
-	return render.New(a.out, a.opts.noColor || a.opts.output == outputPlain)
+	return newPalette(a.out, a.opts.noColor || a.opts.output == outputPlain)
 }
+
+// newPalette is a variable so a test can stand in a terminal: a buffer never
+// is one, and every palette built over it is already off.
+var newPalette = render.New
 
 // userConfig loads kube-ctx's own config file.
 func (a *app) userConfig() (*config.Config, error) {
