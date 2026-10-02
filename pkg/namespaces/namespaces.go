@@ -117,7 +117,7 @@ func Live(rc *rest.Config) ListFunc {
 		}
 		list, err := client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("list namespaces: %w", err)
+			return nil, err
 		}
 		names := make([]string, 0, len(list.Items))
 		for _, ns := range list.Items {

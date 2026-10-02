@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -298,6 +300,22 @@ func TestNsPreviousIsPerContext(t *testing.T) {
 	}
 	if err := h.run("ns", "-"); err == nil {
 		t.Error("expected an error: prod has no namespace history of its own")
+	}
+}
+
+func TestNsListFailureNamesTheStepOnce(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	h := newHarness(t, testutil.Spec{Current: "dev", Contexts: []testutil.Ctx{{Name: "dev", Server: srv.URL}}})
+
+	err := h.run("ns")
+	if err == nil {
+		t.Fatal("expected the refused list to fail")
+	}
+	if got := strings.Count(err.Error(), "list namespaces"); got != 1 {
+		t.Errorf("error = %q, want \"list namespaces\" once", err)
 	}
 }
 
