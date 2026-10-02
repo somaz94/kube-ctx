@@ -908,6 +908,12 @@ func TestBareContextArgumentAcceptsHistoryAndAliases(t *testing.T) {
 	if got := h.config().CurrentContext; got != "dev" {
 		t.Errorf("current = %q, want dev", got)
 	}
+	if err := h.run("-1"); err != nil {
+		t.Fatalf("kctx -1: %v", err)
+	}
+	if got := h.config().CurrentContext; got != "staging" {
+		t.Errorf("current = %q, want staging", got)
+	}
 }
 
 // A guard is not optional just because the shorter form was used.
