@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"sync"
 
@@ -109,7 +108,7 @@ func execOne(base *clientcmdapi.Config, target string, argv []string, namespace 
 
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth())...)
+	cmd.Env = childEnv(session.Env(shellenv.Depth())...)
 	// No stdin, and the output is captured rather than passed through: several
 	// children cannot share one terminal. Lines from four clusters interleaved
 	// are unreadable, and a command that waits on stdin would hang the sweep

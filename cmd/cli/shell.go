@@ -84,7 +84,7 @@ func runShell(a *app, args []string, namespace string) error {
 	cmd := exec.Command(shellPath)
 	// Pinned: this shell asked for one context and is entitled to keep it, so a
 	// directory binding must not switch it out from under the user on a cd.
-	cmd.Env = append(os.Environ(), append(session.Env(shellenv.Depth()+1), shellenv.EnvPinned+"=1")...)
+	cmd.Env = childEnv(append(session.Env(shellenv.Depth()+1), shellenv.EnvPinned+"=1")...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 	// The child owns the terminal while it runs. Ctrl-C reaches the whole
@@ -253,7 +253,7 @@ func runExec(a *app, target string, argv []string, nsFlag string) error {
 	}
 
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Env = append(os.Environ(), session.Env(shellenv.Depth())...)
+	cmd.Env = childEnv(session.Env(shellenv.Depth())...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, a.out, a.errOut
 
 	// Ctrl-C reaches the whole foreground process group. Without this, dying
@@ -343,6 +343,21 @@ func sessionConfig(a *app, args []string, namespace string) (*clientcmdapi.Confi
 		}
 	}
 	return cfg, target, nil
+}
+
+// childEnv is this process's environment for a spawned child, minus the hook's
+// per-call variables: a kctx run inside the child would otherwise write its
+// exports into the file the parent shell sources once this command returns.
+func childEnv(extra ...string) []string {
+	inherited := os.Environ()
+	env := make([]string, 0, len(inherited)+len(extra))
+	for _, kv := range inherited {
+		if key, _, _ := strings.Cut(kv, "="); key == shellenv.EnvFile || key == shellenv.EnvShell {
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, extra...)
 }
 
 // namespaceOf returns the namespace a context points at, or "default".

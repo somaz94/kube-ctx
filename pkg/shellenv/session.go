@@ -42,7 +42,8 @@ const (
 	EnvKubeconfig = "KUBECONFIG"
 	// EnvShellID marks a shell as kube-ctx-managed and names its session.
 	EnvShellID = "KUBE_CTX_SHELL_ID"
-	// EnvActive names the context the session started on, for prompts.
+	// EnvActive names the context a managed shell is on, for prompts. Only the
+	// hook can carry a later switch back into the shell's environment.
 	EnvActive = "KUBE_CTX_ACTIVE"
 	// EnvDepth counts nested managed shells.
 	EnvDepth = "KUBE_CTX_DEPTH"

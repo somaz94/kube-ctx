@@ -143,7 +143,11 @@ func saveSwitch(a *app, cfg *clientcmdapi.Config, target string) error {
 		// is deliberately left exactly as it was.
 		return nil
 	}
-	return a.loader().Save(cfg)
+	if err := a.loader().Save(cfg); err != nil {
+		return err
+	}
+	refreshActive(a, target)
+	return nil
 }
 
 // requireGuardConfirmation runs the guard prompt, if the rule asks for one.

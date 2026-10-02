@@ -254,7 +254,13 @@ without asking — they are the release pipeline.
   context, so the prompt renders identically and `kube-ps1` and friends report
   no change. kube-ctx exports `$KUBE_CTX_ACTIVE` / `$KUBE_CTX_DEPTH` and prints
   the snippet on the way into the first one (`hintPrompt`), but never installs
-  it: rewriting `$PS1` would fight the user's own theme.
+  it: rewriting `$PS1` would fight the user's own theme. `startShellSession`
+  writes the exports only on a shell's first switch, so `saveSwitch` re-exports
+  `$KUBE_CTX_ACTIVE` after every later one (`refreshActive`); without it the
+  prompt kept saying `[dev]` while kubectl talked to prod. That makes the hook's
+  per-call variables live, so `shell`, `exec` and fan-out children get
+  `childEnv`, which drops `$KUBE_CTX_ENV_FILE` and `$KUBE_CTX_SHELL`: a kctx run
+  inside a child would otherwise rewrite the parent shell's prompt.
 - **The krew build cannot switch shell-locally** — `kubectl` runs a plugin as a
   subprocess, so `kubectl ctx2 ctx prod` writes the global kubeconfig no matter
   what: the hook is a shell function `kubectl` never consults. It cannot be

@@ -348,6 +348,7 @@ func TestHookModeKeepsTheGlobalKubeconfigIntact(t *testing.T) {
 
 func TestHookModeSecondSwitchWritesToTheSession(t *testing.T) {
 	h := newHarness(t, defaultSpec())
+	t.Setenv(shellenv.EnvShell, "bash")
 	envFile := filepath.Join(t.TempDir(), "env")
 	t.Setenv(shellenv.EnvFile, envFile)
 
@@ -378,13 +379,92 @@ func TestHookModeSecondSwitchWritesToTheSession(t *testing.T) {
 	if got := h.config().CurrentContext; got != "dev" {
 		t.Errorf("global current-context = %q, want dev", got)
 	}
-	// No second session: the shell already has one.
-	info, err := os.Stat(envFile)
+	// No second session, but the prompt variable follows the switch: exporting
+	// it only on the first left the prompt on prod while kubectl was on staging.
+	data, err = os.ReadFile(envFile)
 	if err != nil {
-		t.Fatalf("stat env file: %v", err)
+		t.Fatalf("read env file: %v", err)
 	}
-	if info.Size() != 0 {
-		t.Error("a second session was created for a shell that already had one")
+	exports := string(data)
+	if !strings.Contains(exports, "export "+shellenv.EnvActive+"='staging'") {
+		t.Errorf("exports do not refresh %s:\n%s", shellenv.EnvActive, exports)
+	}
+	if strings.Contains(exports, shellenv.EnvKubeconfig) || strings.Contains(exports, shellenv.EnvShellID) {
+		t.Errorf("a second session was created for a shell that already had one:\n%s", exports)
+	}
+
+	// --kubeconfig saves a file this shell's kubectl does not read.
+	other := filepath.Join(t.TempDir(), "other")
+	testutil.Write(t, other, testutil.Config(defaultSpec()))
+	if err := os.Truncate(envFile, 0); err != nil {
+		t.Fatalf("truncate env file: %v", err)
+	}
+	if err := h.run("--kubeconfig", other, "ctx", "prod"); err != nil {
+		t.Fatalf("ctx --kubeconfig: %v", err)
+	}
+	if data, _ := os.ReadFile(envFile); strings.Contains(string(data), shellenv.EnvActive) {
+		t.Errorf("a --kubeconfig switch refreshed the prompt of a shell that did not move:\n%s", data)
+	}
+}
+
+// A kctx run inside a child must not write into the env file the parent shell
+// sources once the spawning command returns.
+func TestSpawnedChildrenDoNotInheritTheHookEnvFile(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{"shell", []string{"shell", "prod"}},
+		{"exec", []string{"exec", "prod", "--", "true"}},
+		{"fan-out", []string{"exec", "-c", "prod", "--", "true"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, defaultSpec())
+			t.Setenv(shellenv.EnvFile, filepath.Join(t.TempDir(), "env"))
+			t.Setenv(shellenv.EnvShell, "bash")
+
+			var file, shell string
+			original := runCommand
+			runCommand = func(cmd *exec.Cmd) error {
+				file, shell = envValue(cmd.Env, shellenv.EnvFile), envValue(cmd.Env, shellenv.EnvShell)
+				return nil
+			}
+			t.Cleanup(func() { runCommand = original })
+
+			if err := h.run(tt.args...); err != nil {
+				t.Fatalf("%v: %v", tt.args, err)
+			}
+			if file != "" || shell != "" {
+				t.Errorf("child inherited %s=%q, %s=%q", shellenv.EnvFile, file, shellenv.EnvShell, shell)
+			}
+		})
+	}
+}
+
+// The switch has landed by the time the prompt variable is written, so failing
+// to write it warns rather than reporting the switch as failed.
+func TestHookModeSwitchOnlyWarnsWhenThePromptCannotBeRefreshed(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+	data, err := os.ReadFile(h.kubeconfig)
+	if err != nil {
+		t.Fatalf("read kubeconfig: %v", err)
+	}
+	sessionPath := filepath.Join(t.TempDir(), "session.yaml")
+	if err := os.WriteFile(sessionPath, data, 0o600); err != nil {
+		t.Fatalf("write session copy: %v", err)
+	}
+	t.Setenv("KUBECONFIG", sessionPath)
+	t.Setenv(shellenv.EnvShellID, "session-1")
+	t.Setenv(shellenv.EnvFile, t.TempDir()) // a directory: appending to it fails
+
+	if err := h.run("ctx", "prod"); err != nil {
+		t.Fatalf("ctx prod: %v", err)
+	}
+	if got := testutil.Read(t, sessionPath).CurrentContext; got != "prod" {
+		t.Errorf("session current-context = %q, want prod", got)
+	}
+	if !strings.Contains(h.stderr(), "warning:") || !strings.Contains(h.stderr(), shellenv.EnvActive) {
+		t.Errorf("stderr = %q, want a warning naming %s", h.stderr(), shellenv.EnvActive)
 	}
 }
 

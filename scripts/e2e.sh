@@ -363,6 +363,9 @@ echo "kubeconfig=\$KUBECONFIG"
 echo "active=\$KUBE_CTX_ACTIVE"
 echo "depth=\$KUBE_CTX_DEPTH"
 echo "context="(kubectl config current-context)
+kctx ctx $PROD >/dev/null
+echo "active-after=\$KUBE_CTX_ACTIVE"
+echo "depth-after=\$KUBE_CTX_DEPTH"
 EOF
   else
     cat >"$script" <<EOF
@@ -372,10 +375,13 @@ echo "kubeconfig=\$KUBECONFIG"
 echo "active=\$KUBE_CTX_ACTIVE"
 echo "depth=\$KUBE_CTX_DEPTH"
 echo "context=\$(kubectl config current-context)"
+kctx ctx $PROD >/dev/null
+echo "active-after=\$KUBE_CTX_ACTIVE"
+echo "depth-after=\$KUBE_CTX_DEPTH"
 EOF
   fi
 
-  capture "$sh" "$script"
+  capture "$sh" "$script" <"$WORK/no-answer"
 }
 
 check_hook() {
@@ -391,6 +397,8 @@ check_hook() {
     hook_probe "$sh"
     assert_status 0 "$sh: the hook shell exits cleanly"
     assert_contains "active=$STAGING" "$sh: the hook exports KUBE_CTX_ACTIVE"
+    assert_contains "active-after=$PROD" "$sh: ... and re-exports it on a later switch"
+    assert_contains "depth-after=1" "$sh: ... in the same session, not a second copy"
     assert_contains "depth=1" "$sh: the hook exports KUBE_CTX_DEPTH"
     # The one that matters. When the exports are written in the wrong shell's
     # syntax, sourcing them fails, $KUBECONFIG keeps pointing at the global

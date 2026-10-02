@@ -214,25 +214,5 @@ func announceBound(a *app, target, message string) error {
 // sources. Without the hook there is nowhere to put it, and the binding is
 // re-evaluated next time — which is correct, since the switch was global.
 func markBound(a *app, target string) error {
-	envFile := os.Getenv(shellenv.EnvFile)
-	if envFile == "" {
-		return nil
-	}
-	sh, err := shellenv.ParseShell(os.Getenv(shellenv.EnvShell), os.Getenv("SHELL"))
-	if err != nil {
-		sh = shellenv.Bash
-	}
-
-	f, err := os.OpenFile(envFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
-	if err != nil {
-		return fmt.Errorf("write shell environment: %w", err)
-	}
-	if _, err := fmt.Fprintln(f, shellenv.ExportLine(sh, shellenv.EnvBound, target)); err != nil {
-		_ = f.Close()
-		return fmt.Errorf("write shell environment: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("write shell environment: %w", err)
-	}
-	return nil
+	return appendExport(shellenv.EnvBound, target)
 }

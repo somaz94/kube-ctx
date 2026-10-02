@@ -61,16 +61,53 @@ func startShellSession(a *app, cfg *clientcmdapi.Config, target string) (bool, e
 	// "kctx shell" skips its Remove. Best-effort: never fail the switch over it.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
-	// The hook names its own shell; $SHELL is only a fallback because it is the
-	// login shell. Wrong syntax loses a switch kctx already reported: bash
-	// rejects fish's "set -gx", and the hook still returns kctx's own status.
-	sh, err := shellenv.ParseShell(os.Getenv(shellenv.EnvShell), os.Getenv("SHELL"))
-	if err != nil {
-		sh = shellenv.Bash
-	}
-	if err := os.WriteFile(envFile, []byte(session.Exports(sh, shellenv.Depth()+1)), 0o600); err != nil {
+	if err := os.WriteFile(envFile, []byte(session.Exports(hookShell(), shellenv.Depth()+1)), 0o600); err != nil {
 		_ = session.Remove()
 		return false, fmt.Errorf("write shell environment: %w", err)
 	}
 	return true, nil
+}
+
+// refreshActive re-exports $KUBE_CTX_ACTIVE, which startShellSession writes only
+// on a shell's first switch. The switch has already landed, so a failure only
+// warns. A --kubeconfig switch saved a file this shell's kubectl does not read.
+func refreshActive(a *app, target string) {
+	if !shellenv.Active() || a.opts.kubeconfig != "" {
+		return
+	}
+	if err := appendExport(shellenv.EnvActive, target); err != nil {
+		fmt.Fprintf(a.errOut, "warning: %v; $%s still names the previous context\n", err, shellenv.EnvActive)
+	}
+}
+
+// appendExport adds one export to the file the shell hook sources after this
+// command. Without the hook there is no such file, and nothing to do.
+func appendExport(key, value string) error {
+	envFile := os.Getenv(shellenv.EnvFile)
+	if envFile == "" {
+		return nil
+	}
+	f, err := os.OpenFile(envFile, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return fmt.Errorf("write shell environment: %w", err)
+	}
+	if _, err := fmt.Fprintln(f, shellenv.ExportLine(hookShell(), key, value)); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write shell environment: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("write shell environment: %w", err)
+	}
+	return nil
+}
+
+// hookShell is the shell the env file must be written for. $SHELL is only the
+// fallback, being the login shell: wrong syntax fails to source, and the hook
+// still reports kctx's success, so the switch is lost silently.
+func hookShell() shellenv.Shell {
+	sh, err := shellenv.ParseShell(os.Getenv(shellenv.EnvShell), os.Getenv("SHELL"))
+	if err != nil {
+		return shellenv.Bash
+	}
+	return sh
 }

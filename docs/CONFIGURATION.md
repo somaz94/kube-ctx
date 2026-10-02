@@ -247,7 +247,7 @@ test -n "$KUBE_CTX_ACTIVE"; and echo -n "[$KUBE_CTX_ACTIVE] "
 | `KUBE_CTX_ENV_FILE` | ✅ | by the hook | Where to write exports for the calling shell |
 | `KUBE_CTX_SHELL` | ✅ | by the hook | Which shell's syntax to write that file in |
 | `KUBE_CTX_SHELL_ID` | ✅ | ✅ | Marks a managed shell; scopes its history |
-| `KUBE_CTX_ACTIVE` | — | ✅ | The context a managed shell is on |
+| `KUBE_CTX_ACTIVE` | — | ✅ | The context a managed shell is on, re-exported by the hook on every switch |
 | `KUBE_CTX_DEPTH` | ✅ | ✅ | How many managed shells deep |
 | `SHELL` | ✅ | — | Which shell to spawn, the default for `kctx init`, and the fallback when `KUBE_CTX_SHELL` is unset |
 | `NO_COLOR`, `TERM` | ✅ | — | Color opt-out |
