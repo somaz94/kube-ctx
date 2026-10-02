@@ -540,7 +540,7 @@ func TestDeleteConfirmed(t *testing.T) {
 	if _, ok := cfg.Contexts["prod"]; ok {
 		t.Error("context not deleted")
 	}
-	// Shared-by-nobody cluster and user survive without --prune.
+	// The now-unreferenced cluster and user survive without --prune.
 	if _, ok := cfg.Clusters["prod-cluster"]; !ok {
 		t.Error("cluster removed without --prune")
 	}
@@ -722,8 +722,7 @@ func TestNormalizeArgs(t *testing.T) {
 			[]string{"exec", "dev", "--", "kubectl", "logs", "--tail", "-1"},
 			[]string{"exec", "dev", "--", "kubectl", "logs", "--tail", "-1"},
 		},
-		// The terminator does not have to be the last chance to use the
-		// shorthand: what comes before it is still kube-ctx's own argv.
+		// Before the terminator the argv is still kube-ctx's, so "-2" is rewritten.
 		{
 			[]string{"exec", "-2", "--", "sh", "-c", "echo -1"},
 			[]string{"exec", "--back=2", "--", "sh", "-c", "echo -1"},
@@ -958,7 +957,7 @@ func TestBareContextArgumentAcceptsHistoryAndAliases(t *testing.T) {
 	}
 
 	// "-" and "-N" walk history here too; without the root --back flag,
-	// normalizeArgs' rewrite left "kctx -2" saying "unknown flag: --back".
+	// normalizeArgs' rewrite left "kctx -1" saying "unknown flag: --back".
 	if err := h.run("-"); err != nil {
 		t.Fatalf("kctx -: %v", err)
 	}

@@ -62,10 +62,8 @@ func TestImportAddsContexts(t *testing.T) {
 	}
 }
 
-// clientcmd routes a write by the file each stanza was read from, so an import
-// that kept the source's LocationOfOrigin would write the user's new contexts
-// straight back into the file they were imported from — leaving their own
-// kubeconfig untouched and quietly editing someone else's.
+// clientcmd routes a write by each stanza's LocationOfOrigin: kept from the
+// source, it sends the imported contexts back into the file they came from.
 func TestImportWritesIntoTheUsersOwnKubeconfig(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	src := writeSource(t, h, "downloaded.yaml", foreignSpec())

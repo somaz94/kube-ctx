@@ -146,7 +146,7 @@ func TestRunningInASessionKeepsItAlive(t *testing.T) {
 		t.Fatalf("current: %v", err)
 	}
 
-	// Reported from another shell, so "current" does not shield it.
+	// Cleaned from another shell, so it is not exempt as the caller's own copy.
 	t.Setenv(EnvShellID, "")
 	if err := h.run("sessions", "--clean"); err != nil {
 		t.Fatalf("sessions --clean: %v", err)

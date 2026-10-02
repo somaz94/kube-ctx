@@ -545,10 +545,8 @@ func TestNamespaceGuardPromptAsksForTheNamespace(t *testing.T) {
 	}
 }
 
-// A namespace rule reaches a context switch only through the namespace it
-// lands in. Here prod sits in "monitoring", so the rule about kube-system has
-// nothing to say and the switch must not prompt — otherwise the second axis
-// has quietly become the first.
+// prod lands in "monitoring", so a kube-system rule must not prompt on the
+// switch; otherwise the second axis has quietly become the first.
 func TestNamespaceGuardDoesNotBlockAnUnrelatedContextSwitch(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	writeUserConfig(t, nsGuardConfirmConfig)

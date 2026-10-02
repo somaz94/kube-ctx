@@ -13,11 +13,9 @@ import (
 	"github.com/somaz94/kube-ctx/pkg/shellenv"
 )
 
-// envValue extracts one KEY=value entry from an environment slice.
-//
-// The last occurrence wins, matching how exec resolves a duplicated variable:
-// the session entries are appended to the inherited environment, so an
-// inherited KUBECONFIG appears first and the session's override second.
+// envValue extracts one KEY=value entry from an environment slice. The last
+// occurrence wins, as it does for exec: childEnv appends the session's entries
+// after the inherited ones, so an inherited KUBECONFIG comes first.
 func envValue(env []string, key string) string {
 	value := ""
 	for _, entry := range env {
@@ -230,9 +228,8 @@ func TestExecPropagatesExitCode(t *testing.T) {
 	}
 }
 
-// A child killed by a signal has no exit code of its own — ExitCode reports
-// -1, and exiting with that becomes 255, a status some other command could
-// legitimately have returned. Shells report 128+signal, so kctx does too.
+// A signal death exits 128+signal, as shells report it: exec.ExitError's -1
+// would exit 255, which any command could have returned on its own.
 func TestExecReportsSignalDeathAsShellsDo(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 
@@ -346,8 +343,8 @@ func TestHookModeKeepsTheGlobalKubeconfigIntact(t *testing.T) {
 	}
 }
 
-// sourceExports does what the hook does with the env file: applies its exports
-// to this process, then empties it for the next command.
+// sourceExports applies the env file's exports to this process, then empties
+// it: the hook mktemps a fresh file per call, and tests reuse one path.
 func sourceExports(t *testing.T, envFile string) {
 	t.Helper()
 	data, err := os.ReadFile(envFile)
