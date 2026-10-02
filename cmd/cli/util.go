@@ -89,9 +89,6 @@ func resolveContexts(a *app, cfg *clientcmdapi.Config, names []string) ([]string
 }
 
 // historyRef reads the "-" / "-N" / --back forms shared by ctx and ns.
-//
-// Both commands accept the same shorthand and parsed it separately; keeping one
-// copy means "back two" cannot come to mean different things in each.
 func historyRef(args []string, back int) int {
 	if back == 0 && len(args) == 1 {
 		if n := contexts.ParseRef(args[0]); n > 0 {
@@ -199,12 +196,7 @@ func trimError(msg string, max int) string {
 	return string(runes[:max-1]) + "…"
 }
 
-// boldIfCurrent marks the name the user is presently on.
-//
-// Shared rather than inlined per command: five listings had their own copy,
-// and a sixth that forgot would silently stop marking where the user is. Used
-// for namespaces as well as contexts, hence the name — the question is only
-// ever "is this the one".
+// boldIfCurrent bolds name when it is the current context or namespace.
 func boldIfCurrent(pal render.Palette, name, current string) string {
 	if name == current {
 		return pal.Bold(name)

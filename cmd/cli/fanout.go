@@ -20,10 +20,6 @@ import (
 const defaultFanoutParallel = 8
 
 // fanoutResult is one context's outcome.
-//
-// Output is captured rather than streamed, so it is a string here: with several
-// commands running at once there is no way to pass their writes straight
-// through and still have the result be readable.
 type fanoutResult struct {
 	Context  string `json:"context"`
 	ExitCode int    `json:"exitCode"`

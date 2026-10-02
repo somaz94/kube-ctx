@@ -100,10 +100,8 @@ func (h *harness) config() *clientcmdapi.Config {
 	return testutil.Read(h.t, h.kubeconfig)
 }
 
-// stdout returns captured standard output.
 func (h *harness) stdout() string { return h.out.String() }
 
-// stderr returns captured standard error.
 func (h *harness) stderr() string { return h.errOut.String() }
 
 func defaultSpec() testutil.Spec {
@@ -166,7 +164,7 @@ func TestCtxPreviousAndHistoryDepth(t *testing.T) {
 		t.Errorf("after '-' current = %q, want prod", got)
 	}
 
-	// "-2" goes back two from here.
+	// Newest first, history is now staging, prod, dev, so "-2" is prod again.
 	if err := h.run("ctx", "-2"); err != nil {
 		t.Fatalf("ctx -2: %v", err)
 	}
@@ -327,7 +325,6 @@ func TestList(t *testing.T) {
 	if strings.Contains(out, "CLUSTER") {
 		t.Error("cluster column should need --wide")
 	}
-	// The current context is marked.
 	for _, line := range strings.Split(out, "\n") {
 		if strings.Contains(line, "dev") && !strings.HasPrefix(line, "*") {
 			t.Errorf("current context not marked: %q", line)
@@ -706,8 +703,6 @@ func TestCompleteContexts(t *testing.T) {
 		}
 	}
 
-	// Commands taking one context have nothing to complete for a second
-	// argument.
 	if got, _ := completeContexts(a)(nil, []string{"dev"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
 	}
@@ -731,8 +726,7 @@ func TestCompleteOffersShadowingAliasWithAt(t *testing.T) {
 	}
 }
 
-// delete, doctor and guard add take a list, so every argument completes — and
-// a name already on the line is not offered again.
+// List-taking commands complete every argument except the ones already given.
 func TestCompleteContextListCoversEveryArgument(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	a := &app{out: &h.out, errOut: &h.errOut, in: h.in}

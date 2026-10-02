@@ -59,7 +59,6 @@ func TestExpiryReportsWhatIsInTheWindow(t *testing.T) {
 	if !strings.Contains(out, "gw") || !strings.Contains(out, "8d") {
 		t.Errorf("stdout = %q, want the expiring certificate", out)
 	}
-	// Beyond the window is not this report's business.
 	if strings.Contains(out, "far-off") {
 		t.Errorf("stdout included a certificate outside the window: %q", out)
 	}
@@ -254,7 +253,6 @@ func TestExpiryAllShowsEverythingWithoutRaisingTheAlarm(t *testing.T) {
 	}
 }
 
-// ... but something genuinely due still exits 2 with --all in play.
 func TestExpiryAllStillFlagsWhatIsDue(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	now := fixedNow(t)

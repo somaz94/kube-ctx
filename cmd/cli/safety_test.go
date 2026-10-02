@@ -13,11 +13,8 @@ import (
 // guardConfirmConfig makes "prod" a danger context that demands retyping.
 const guardConfirmConfig = "guards:\n  - match: 'prod'\n    level: danger\n    confirm: true\n"
 
-// allowRun stubs the spawner for tests where reaching it is the expected
-// outcome, and reports whether it was reached.
-//
-// The sibling captureRunNoop fails the test on any spawn; these cases need the
-// opposite, since "the guard let it through" is what they assert.
+// allowRun stubs the spawner for tests that expect to reach it, unlike
+// captureRunNoop, and reports whether it was reached.
 func allowRun(t *testing.T) *bool {
 	t.Helper()
 	var ran bool
@@ -60,7 +57,6 @@ func TestGuardCoversEveryRouteToACluster(t *testing.T) {
 	}
 }
 
-// Retyping the name lets the command through.
 func TestGuardConfirmedExecRuns(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	writeUserConfig(t, guardConfirmConfig)
@@ -87,7 +83,6 @@ func TestExecAnnouncesAGuardedContext(t *testing.T) {
 	if !strings.Contains(h.stderr(), "DANGER") {
 		t.Errorf("stderr = %q, want the guard badge", h.stderr())
 	}
-	// A context nothing classifies must stay quiet.
 	h2 := newHarness(t, defaultSpec())
 	allowRun(t)
 	if err := h2.run("exec", "dev", "--", "true"); err != nil {
@@ -330,7 +325,6 @@ func TestCompleteGuardPositions(t *testing.T) {
 	if !strings.Contains(got[0], "danger") {
 		t.Errorf("completion %q does not describe the rule", got[0])
 	}
-	// Only the one argument the command takes.
 	if got, _ := completeGuardPositions(a)(nil, []string{"1"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
 	}
@@ -478,7 +472,6 @@ func TestNamespaceGuardCoversEveryRouteToANamespace(t *testing.T) {
 	}
 }
 
-// Retyping the namespace lets the command through.
 func TestNamespaceGuardConfirmedSwitchApplies(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	writeUserConfig(t, nsGuardConfirmConfig)
@@ -553,7 +546,6 @@ func TestNamespaceGuardCoversTheContextsOwnNamespace(t *testing.T) {
 	}
 }
 
-// A namespace nobody guarded still goes through without a word.
 func TestUnguardedNamespaceIsUntouched(t *testing.T) {
 	h := newHarness(t, defaultSpec())
 	writeUserConfig(t, nsGuardConfirmConfig)
@@ -695,8 +687,8 @@ func TestNamespaceGuardCoversTheContextSwitch(t *testing.T) {
 	}
 }
 
-// With both axes guarded the two prompts are asked in turn, and each wants its
-// own name back.
+// Both answers arrive on one pipe. A reader per prompt read ahead, swallowed
+// the second, and the second prompt read EOF as a decline.
 func TestBothGuardsPromptSeparatelyOnASwitch(t *testing.T) {
 	h := newHarness(t, testutil.Spec{
 		Current:  "dev",

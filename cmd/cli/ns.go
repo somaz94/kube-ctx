@@ -152,9 +152,8 @@ func switchNamespace(a *app, cfg *clientcmdapi.Config, target string) error {
 // printNamespaces writes one namespace per line, marking the active one.
 func printNamespaces(a *app, names []string, current string) error {
 	if len(names) == 0 {
-		// A cluster can answer with an empty list when RBAC forbids listing
-		// namespaces. Printing nothing and exiting 0 reads as a broken binary,
-		// the same way it would for "kctx" with no contexts.
+		// Reached only on an empty answer: a 403 already failed in fetchNamespaces.
+		// Printing nothing and exiting 0 reads as a broken binary.
 		_, err := fmt.Fprintln(a.errOut,
 			"No namespaces returned; the credential may not be allowed to list them.")
 		return err

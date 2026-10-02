@@ -87,11 +87,8 @@ func runDoctor(a *app, names []string, timeout time.Duration, concurrency int, o
 
 	for _, r := range results {
 		if !r.Healthy() {
-			// A non-zero exit makes the command usable as a check in a script,
-			// and a code of its own separates "a cluster is sick" from "kctx
-			// could not run" — otherwise "kctx doctor prod || page" fires the
-			// same way for an unreachable cluster and a typo in --kubeconfig.
-			// The error is silent because the table already said what is wrong.
+			// ExitUnhealthy, so a script can tell a sick cluster from kctx failing
+			// by $? ("||" fires on both). Silent: the table already said it.
 			return &exitError{code: ExitUnhealthy}
 		}
 	}

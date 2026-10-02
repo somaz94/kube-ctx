@@ -67,8 +67,8 @@ func runShell(a *app, args []string, namespace string) error {
 	}
 	defer func() { _ = session.Remove() }()
 
-	// Sweep session files left behind by shells that were killed rather than
-	// exited. Best-effort: never fail the command the user asked for.
+	// Sweep idle copies: no hooked terminal removes its own on exit, and a killed
+	// "kctx shell" skips its Remove. Best-effort: never fail the command over it.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
 	shellPath := os.Getenv("SHELL")

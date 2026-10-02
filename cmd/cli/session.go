@@ -29,10 +29,9 @@ func historyScope() string {
 // guardSessionScoped refuses a durable kubeconfig edit attempted from inside a
 // kube-ctx-managed shell.
 //
-// In one of those, $KUBECONFIG points at a private copy that is deleted when
-// the shell exits, so the edit would report success and then leave with the
-// copy. A context switch being shell-local is the whole point; an edit meant to
-// outlive the shell is not.
+// In one of those, $KUBECONFIG points at a private copy nothing reads once the
+// shell exits, so the edit would report success and then be lost. A switch
+// being shell-local is the whole point; an edit meant to outlive it is not.
 func guardSessionScoped(op string) error {
 	if !shellenv.Active() {
 		return nil
@@ -58,8 +57,8 @@ func startShellSession(a *app, cfg *clientcmdapi.Config, target string) (bool, e
 	if err != nil {
 		return false, err
 	}
-	// Sweep copies left behind by shells that were killed rather than exited.
-	// Best-effort: never fail the switch the user asked for.
+	// Sweep idle copies: no hooked terminal removes its own on exit, and a killed
+	// "kctx shell" skips its Remove. Best-effort: never fail the switch over it.
 	_ = shellenv.GC(shellenv.DefaultMaxAge)
 
 	// The hook names its own shell; $SHELL is only a fallback because it is the

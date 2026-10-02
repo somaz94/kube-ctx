@@ -89,7 +89,6 @@ func TestConfirmSurfacesWriteErrors(t *testing.T) {
 	}
 }
 
-// failingWriter fails every write.
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, os.ErrClosed }
@@ -229,7 +228,6 @@ func TestCompleteNamespaces(t *testing.T) {
 		t.Errorf("completions = %v, want the cached namespaces", got)
 	}
 
-	// A second positional argument has nothing left to complete.
 	if got, _ := completeNamespaces(a)(nil, []string{"default"}, ""); got != nil {
 		t.Errorf("completions for a second arg = %v, want none", got)
 	}

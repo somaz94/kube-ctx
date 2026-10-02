@@ -137,25 +137,15 @@ func NewRootCmd(out, errOut io.Writer, in io.Reader) *cobra.Command {
 		SilenceErrors: true,
 		// Runs for every subcommand, so no command has to remember to check.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Running at all is proof this shell is alive, which is what keeps
-			// the age-based sweep from deleting the kubeconfig out from under a
-			// terminal that has been open a long time without switching.
-			// Best-effort: a session that cannot be touched is not a reason to
-			// refuse the command.
+			// Keeps a long-open terminal's session from being swept; best-effort,
+			// so a session that cannot be touched never fails the command.
 			_ = shellenv.Touch()
 			return validateOutput(a.opts.output)
 		},
-		// Bare "kctx" is the most common thing to type, so it does what
-		// "kctx ctx" does: open the picker, or list when there is no terminal.
-		// A name goes straight through to the switch, which is the form
-		// kubectx trained everyone's fingers on — and until it did, "kctx
-		// staging" answered a context that plainly exists with "unknown
-		// command", the least useful thing it could have said.
-		//
-		// A name that collides with a subcommand loses to it: cobra resolves
-		// the tree before this runs. That is the right way round — "kctx list"
-		// must keep listing — and "kctx ctx list" is the escape hatch, the
-		// same shape as the "@" that forces the alias reading of a name.
+		// Bare "kctx" and "kctx <name>" act as "kctx ctx" does, the form kubectx
+		// trained everyone on. A name colliding with a subcommand loses to it, since
+		// cobra resolves the tree before this runs: "kctx list" must keep listing,
+		// and "kctx ctx list" is the escape hatch.
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeContexts(a),
 		RunE: func(cmd *cobra.Command, args []string) error {

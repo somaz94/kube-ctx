@@ -213,9 +213,8 @@ func renderExpiryTable(a *app, current string, results []expiry.Result, now time
 func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	if item.Expired(now) {
 		if item.Managed() {
-			// The same distinction (auto, overdue) draws, at the end it runs
-			// to: cert-manager owns this one and let it die, which is a
-			// different fix from a secret nobody ever automated.
+			// Still marked "(auto)": cert-manager let this one die, a different
+			// fix from a secret nobody ever automated.
 			return pal.Red("expired (auto)")
 		}
 		return pal.Red("expired")
@@ -224,16 +223,12 @@ func expiryCell(pal render.Palette, item expiry.Item, now time.Time) string {
 	left := item.In(now)
 	text := fmt.Sprintf("%dd", int(left.Hours()/24))
 	switch {
-	// Dimmed only while cert-manager's own schedule is still ahead of it.
-	// Renewals do fail — DNS-01 broken, an ACME rate limit, an issuer deleted
-	// — and a renewal date that has passed with the certificate still here is
-	// the most urgent row on the page, not the quietest.
+	// Dimmed only until renewalTime plus renewalGrace. Renewals do fail — DNS-01
+	// broken, an ACME rate limit, an issuer deleted — and a missed renewal is the
+	// most urgent row on the page, not the quietest.
 	case item.Managed() && (item.RenewalTime == nil || now.Sub(*item.RenewalTime) < renewalGrace):
 		return pal.Dim(text + " (auto)")
 	case item.Managed():
-		// cert-manager meant to renew this and the date went by. Saying so is
-		// the point: rendered as a plain countdown it is indistinguishable
-		// from a certificate nobody ever automated, and the fix is different.
 		return pal.Red(text + " (auto, overdue)")
 	case left < 7*24*time.Hour:
 		return pal.Red(text)

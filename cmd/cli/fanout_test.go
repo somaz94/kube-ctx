@@ -18,12 +18,9 @@ import (
 	"github.com/somaz94/kube-ctx/internal/testutil"
 )
 
-// fanoutRun stubs the spawner with one that is safe to call from several
-// goroutines at once and reports which context each child was pinned to.
-//
-// The context is read back out of the child's own $KUBECONFIG rather than
-// assumed, because "did each child get a session of its own" is the whole
-// question a fan-out has to answer.
+// fanoutRun stubs the spawner, safe across goroutines, and records the context
+// each child's own $KUBECONFIG names: whether every child got a session of its
+// own is the question a fan-out has to answer.
 func fanoutRun(t *testing.T, behave func(ctxName string, stdout, stderr io.Writer) error) *[]string {
 	t.Helper()
 	var (

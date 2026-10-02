@@ -79,7 +79,6 @@ func TestShellSpawnsWithSessionKubeconfig(t *testing.T) {
 	if got := h.config().CurrentContext; got != "dev" {
 		t.Errorf("global current-context = %q, want dev", got)
 	}
-	// And the session copy must not outlive the shell.
 	if _, err := os.Stat(sessionPath); !os.IsNotExist(err) {
 		t.Error("session kubeconfig survived the shell")
 	}
@@ -127,7 +126,6 @@ func TestShellWithNamespace(t *testing.T) {
 	if !strings.Contains(contents, "namespace: kube-system") {
 		t.Errorf("session kubeconfig missing the namespace:\n%s", contents)
 	}
-	// The global copy keeps prod's original namespace.
 	if got := h.config().Contexts["prod"].Namespace; got != "monitoring" {
 		t.Errorf("global prod namespace = %q, want monitoring", got)
 	}
