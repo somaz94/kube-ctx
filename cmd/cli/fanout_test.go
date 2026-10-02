@@ -289,3 +289,28 @@ func TestExecFanoutReportsASpawnFailure(t *testing.T) {
 		t.Errorf("stderr = %q, want the reason", h.stderr())
 	}
 }
+
+// Under --all or -c the first positional slot is the command, so offering
+// context names there completes the line into an error.
+func TestExecCompletionOffersNoContextsInFanOut(t *testing.T) {
+	h := newHarness(t, defaultSpec())
+
+	for _, args := range [][]string{
+		{"__complete", "exec", "--all", ""},
+		{"__complete", "exec", "-c", "dev", ""},
+	} {
+		if err := h.run(args...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		if strings.Contains(h.stdout(), "prod") {
+			t.Errorf("%v offered contexts:\n%s", args, h.stdout())
+		}
+	}
+
+	if err := h.run("__complete", "exec", ""); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if !strings.Contains(h.stdout(), "prod") {
+		t.Errorf("the single-context form lost its completion:\n%s", h.stdout())
+	}
+}

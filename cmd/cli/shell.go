@@ -139,9 +139,14 @@ func newExecCmd(a *app) *cobra.Command {
 		// depends on whether the contexts came from a flag, and cobra's own
 		// "requires at least 1 arg(s)" says nothing about which one is missing.
 		Args: cobra.ArbitraryArgs,
-		// Only the first argument is ours; everything after it belongs to the
-		// command being run, and guessing at it would be wrong.
-		ValidArgsFunction: completeContexts(a),
+		// Only the single-context form's first argument is ours; the rest, and
+		// every argument under --all or -c, belongs to the command being run.
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if opts.all || len(opts.contexts) > 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return completeContexts(a)(cmd, args, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runExecCmd(a, cmd, args, opts)
 		},
