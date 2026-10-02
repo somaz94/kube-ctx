@@ -146,7 +146,7 @@ kctx shell prod-eks              # a subshell pinned to prod
 | `kctx init bash\|zsh\|fish` | Shell hook + completions |
 | `kctx version` | Build information |
 
-Global flags: `--kubeconfig`, `-o color\|plain\|json`, `--no-color`, `-y/--yes`. An unknown `-o` value is an error rather than a silent fallback, so a script asking for `-o jsno` never gets a human table to parse.
+Global flags: `--kubeconfig`, `-o color|plain|json`, `--no-color`, `-y/--yes`. An unknown `-o` value is an error rather than a silent fallback, so a script asking for `-o jsno` never gets a human table to parse.
 
 Exit status is scriptable: `1` is kube-ctx failing, `2` is `doctor` finding a sick cluster, or `expiry` finding a certificate inside the window or failing to read a cluster at all, `130` is you declining a prompt — so `kctx ctx prod && ./deploy.sh` does not deploy when you back out. See [Usage](docs/USAGE.md#exit-status).
 
