@@ -12,19 +12,19 @@ import (
 )
 
 // ErrTooFarBack is returned by Lookup when history is shorter than the step
-// asked for. The caller says what the history was of: one type backs both the
-// context and the per-context namespace stacks.
+// asked for. Its text names no stack because the caller knows which one it was.
 var ErrTooFarBack = errors.New("history does not go back that far")
 
 const (
-	// historyLimit is how many previous contexts are remembered.
+	// historyLimit is how many entries each stack remembers.
 	historyLimit = 20
 	// historyPerm matches the rest of kube-ctx's owner-only file mode.
 	historyPerm = 0o600
 )
 
-// History is the stack of contexts that were switched away from, most recent
-// first. It backs "kctx ctx -" and "kctx ctx -2".
+// History is a stack of names switched away from, most recent first. It backs
+// "kctx ctx -" and "kctx ctx -2", and, scoped per context, "kctx ns -" for
+// namespaces.
 //
 // A scope suffix keeps one shell's history separate from another's: in shell
 // hook mode each shell has its own current context, so a single global stack

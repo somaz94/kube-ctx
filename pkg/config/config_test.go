@@ -152,9 +152,8 @@ func TestSaveResolvesPathWhenUnset(t *testing.T) {
 	}
 }
 
-// Rewriting in place truncates first, and a write cut short there left a file
-// that loads as the built-in guards. A new file renamed over the old one is
-// the only way the old contents survive a failure, so that is what is checked.
+// replaceFile's reason applies; a changed inode is how a test can see the file
+// was replaced rather than rewritten in place.
 func TestSaveReplacesTheFileRatherThanRewritingIt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	cfg := &Config{path: path}
@@ -482,8 +481,6 @@ func TestGuardDescribe(t *testing.T) {
 		{Guard{Prefix: "acme-"}, "acme-*"},
 		{Guard{Suffix: "-live"}, "*-live"},
 		{Guard{Match: "^x$"}, "^x$"},
-		// A namespace rule shows both halves; told only "kube-system", the
-		// reader cannot see whether it reaches the cluster in front of them.
 		{Guard{Prefix: "prod-", Namespaces: []string{"kube-system", "istio-system"}},
 			"prod-* / kube-system, istio-system"},
 		{Guard{Namespaces: []string{"kube-system"}}, "any context / kube-system"},
@@ -570,9 +567,6 @@ func TestBindingsRoundTrip(t *testing.T) {
 	}
 }
 
-// On macOS /tmp and /var are symlinks, and a checkout reached through one is
-// ordinary everywhere. Binding the path the user typed while looking up the
-// path the process reports would then never match.
 func TestBindingsResolveSymlinks(t *testing.T) {
 	root := t.TempDir()
 	real := filepath.Join(root, "real")

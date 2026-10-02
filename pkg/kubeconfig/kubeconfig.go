@@ -31,8 +31,8 @@ const (
 	backupDirName = "backups"
 	// defaultBackupKeep is how many backup generations are retained.
 	defaultBackupKeep = 10
-	// filePerm is used for every file kube-ctx writes; kubeconfigs carry
-	// credentials, so nothing is group- or world-readable.
+	// filePerm is used for every file this package writes itself; kubeconfigs
+	// carry credentials, so nothing is group- or world-readable.
 	filePerm = 0o600
 )
 

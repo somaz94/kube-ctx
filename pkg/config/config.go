@@ -27,15 +27,10 @@ const FileName = "config.yaml"
 // kube-ctx writes.
 const filePerm = 0o600
 
-// header is written above the marshalled config.
-//
-// The guard defaults label but never block, which is the right default but an
-// invisible one: without this, the only way to learn that confirm exists is to
-// read the docs. Save() writes the rules out explicitly, so the line to change
-// is already in the file — this says what changing it does.
-//
-// It is regenerated on every Save because yaml.Marshal cannot round-trip
-// comments; anything the user writes between the keys is lost either way.
+// header is written above the marshalled config, regenerated on every Save
+// because yaml.Marshal cannot round-trip comments. It exists because confirm
+// is off by default and otherwise invisible: Save writes the rules out, so the
+// line to change is already in the file, and this says what changing it does.
 const header = `# kube-ctx configuration.
 #
 # guards classify a context by name; the first matching rule wins. By default
@@ -94,19 +89,13 @@ type Guard struct {
 	// Suffix matches context names that end with it.
 	Suffix string `yaml:"suffix,omitempty" json:"suffix,omitempty"`
 	// Namespaces narrows the rule to these exact namespaces inside a matching
-	// context, turning it from a rule about a cluster into a rule about a
-	// place within one.
+	// context. Setting it moves the whole rule onto the namespace axis, so it
+	// stops classifying the context itself: a context worth badging is rarely
+	// worth prompting for while kube-system is the reverse, and one Level,
+	// Confirm and Label cannot carry both. Guard both with two rules.
 	//
-	// Setting it moves the whole rule onto the namespace axis: it stops
-	// classifying the context itself. Switching to a cluster and moving around
-	// inside it are different acts and want different verdicts — a context
-	// worth badging is rarely one worth prompting for, while kube-system is
-	// the reverse — and one rule cannot carry both, since Level, Confirm and
-	// Label would have to mean two things at once. Guard both by writing two
-	// rules.
-	//
-	// Exact names, not a pattern: unlike context names, the namespaces worth
-	// guarding are the standard ones every cluster spells identically.
+	// Exact names, not a pattern: the namespaces worth guarding are the standard
+	// ones every cluster spells identically.
 	Namespaces []string `yaml:"namespaces,omitempty" json:"namespaces,omitempty"`
 	// Level is safe, warn, or danger.
 	Level Level `yaml:"level" json:"level"`
@@ -180,7 +169,8 @@ func (g Guard) describeContexts() string {
 type Config struct {
 	// Aliases maps a short name to a context name.
 	Aliases map[string]string `yaml:"aliases,omitempty"`
-	// Guards classify contexts. The first matching rule wins.
+	// Guards classify contexts, or namespaces inside them. The first matching
+	// rule on each axis wins.
 	Guards []Guard `yaml:"guards,omitempty"`
 	// Bindings maps an absolute directory to the context to work in there.
 	Bindings map[string]string `yaml:"bindings,omitempty"`
@@ -390,9 +380,9 @@ func writeTarget(path string) string {
 	return path
 }
 
-// ResolveAlias maps an alias to its context name, returning name unchanged when
-// it is not an alias. A leading "@" is accepted so users can force the alias
-// reading of a name that also exists as a context.
+// ResolveAlias maps an alias to its context name. A leading "@" forces the alias
+// reading of a name that also exists as a context, and is stripped even when no
+// alias matches; any other name that is not an alias comes back unchanged.
 func (c *Config) ResolveAlias(name string) string {
 	explicit := strings.HasPrefix(name, "@")
 	key := strings.TrimPrefix(name, "@")
@@ -500,11 +490,9 @@ func underDir(dir, parent string) bool {
 // normalizeDir turns a directory into the canonical form bindings are keyed by,
 // so "." and a trailing slash name the same binding as the full path.
 //
-// Symlinks are resolved as well, and that part is load-bearing rather than
-// tidiness: on macOS /tmp and /var are themselves symlinks, and a home
-// directory or checkout reached through one is common everywhere. Binding the
-// path the user typed and looking up the path the process reports would then
-// never match. A directory that does not exist keeps its plain absolute form —
+// Symlinks are resolved too: on macOS /tmp and /var are themselves symlinks, so
+// binding the path the user typed and looking up the path the process reports
+// would never match. A directory that does not exist keeps its absolute form;
 // binding one is unusual but not an error.
 func normalizeDir(dir string) (string, error) {
 	if strings.TrimSpace(dir) == "" {

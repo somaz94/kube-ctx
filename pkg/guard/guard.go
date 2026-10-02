@@ -151,11 +151,9 @@ func compileRule(g config.Guard) (rule, error) {
 // the failure mode of the latter is every context in the kubeconfig suddenly
 // classified danger, from a rule the user thought was incomplete.
 //
-// A namespace rule is the exception, and only because that reasoning does not
-// reach it. Its namespace list is already a matcher, so an omitted context
-// matcher over-classifies nothing — it guards kube-system and nothing else,
-// everywhere, which is the most obvious rule anyone writes here. Demanding
-// match: '.*' to say it would put a barrier in front of the safety feature.
+// A namespace rule is exempt: its namespace list is already a matcher, so an
+// omitted context matcher over-classifies nothing, and "kube-system everywhere"
+// is the most obvious rule anyone writes here.
 func compile(g config.Guard) (func(string) bool, error) {
 	set := g.Matchers()
 	switch {

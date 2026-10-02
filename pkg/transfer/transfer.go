@@ -122,7 +122,6 @@ func Merge(dst, src *clientcmdapi.Config, opts Options) (Result, error) {
 		_, exists := work.Contexts[target]
 		switch {
 		case exists && sameContext(work, src, target, name):
-			// Importing the same file twice should be boring, not an error.
 			existing := work.Contexts[target]
 			entries = append(entries, Entry{
 				Source: name, Name: target, Cluster: existing.Cluster,
@@ -265,14 +264,10 @@ func adoptCluster(work, src *clientcmdapi.Config, name string) (string, error) {
 		if equalCluster(existing, incoming) {
 			return name, nil
 		}
-		// A different cluster already owns the name — two kubeadm clusters both
-		// called "kubernetes" is the common case. Replacing it would repoint
-		// every context that referenced it at a different API server, so the
-		// incoming one gets a name of its own instead.
-		//
-		// Unless this exact cluster was already adopted under a suffixed name:
-		// contexts in one source file nearly always share a cluster, and minting
-		// a suffix per context leaves a pile of identical stanzas behind.
+		// A different cluster owns the name (two kubeadm clusters both called
+		// "kubernetes"); replacing it would repoint every context using it, so the
+		// incoming one gets a suffixed name, reusing an identical copy adopted
+		// earlier since a file's contexts nearly always share one cluster.
 		if adopted, ok := findEqualCluster(work, incoming); ok {
 			return adopted, nil
 		}
@@ -394,7 +389,7 @@ func equalUser(a, b *clientcmdapi.AuthInfo) bool {
 	return reflect.DeepEqual(x, y)
 }
 
-// freeName returns the first "<base>-N" that taken rejects, starting at 2.
+// freeName returns the first "<base>-N", from 2 up, that taken reports free.
 // Numbering from 2 reads as a second copy of the thing; "-1" reads as the first.
 func freeName(base string, taken func(string) bool) string {
 	for i := 2; ; i++ {

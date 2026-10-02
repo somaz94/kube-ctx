@@ -147,8 +147,6 @@ func TestDefaultLabelsAndStyles(t *testing.T) {
 	}
 }
 
-// A rule may carry contexts, prefix or suffix instead of a regex — the names
-// that most need guarding are the ones no pattern over "prod" will find.
 func TestNonRegexMatchers(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -195,8 +193,6 @@ func TestNonRegexMatchers(t *testing.T) {
 	}
 }
 
-// A rule with no matcher must be rejected rather than matching everything: the
-// failure mode of the latter is a whole kubeconfig silently classified danger.
 func TestRuleWithoutAMatcherIsRejected(t *testing.T) {
 	_, err := New([]config.Guard{{Level: config.LevelDanger}})
 	if err == nil {
@@ -207,8 +203,6 @@ func TestRuleWithoutAMatcherIsRejected(t *testing.T) {
 	}
 }
 
-// Two matchers on one rule is a typo. Honouring either one silently would
-// leave the user believing a context is guarded when it is not.
 func TestRuleWithTwoMatchersIsRejected(t *testing.T) {
 	_, err := New([]config.Guard{{Prefix: "a", Suffix: "b", Level: config.LevelDanger}})
 	if err == nil {
@@ -250,8 +244,7 @@ func TestNamespaceRuleClassifiesTheNamespaceNotTheContext(t *testing.T) {
 	}{
 		{"prod-eks", "kube-system", config.LevelDanger, true},
 		{"prod-eks", "default", config.LevelSafe, false},
-		// Both halves have to match: kube-system in a kind cluster is not the
-		// kube-system the rule means.
+		// Both halves have to match.
 		{"kind-local", "kube-system", config.LevelSafe, false},
 	}
 	for _, tt := range tests {

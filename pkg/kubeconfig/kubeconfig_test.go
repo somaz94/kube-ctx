@@ -331,9 +331,7 @@ func TestReadFileIgnoresTheEnvironment(t *testing.T) {
 		testutil.Spec{Contexts: []testutil.Ctx{{Name: "prod"}}},
 	)
 
-	// Load() would merge both files; ReadFile has to see only the one it was
-	// given, or an import source would arrive already mixed with the config it
-	// is about to be merged into.
+	// Load() would merge both files; ReadFile must see only the one it was given.
 	cfg, err := ReadFile(files[1])
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
