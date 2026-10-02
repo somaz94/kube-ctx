@@ -347,15 +347,17 @@ func (c *Config) Save() error {
 // rule the user wrote. A symlink is followed rather than replaced, since dotfile
 // managers keep this file as one.
 func replaceFile(path string, data []byte) error {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = resolved
-	}
+	path = writeTarget(path)
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }() // a no-op once renamed
 
+	if err := tmp.Chmod(filePerm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return err
@@ -368,6 +370,24 @@ func replaceFile(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// writeTarget follows the symlinks at path to the file a write should replace.
+// Link by link rather than through EvalSymlinks, which fails on a link whose
+// target does not exist yet, and the rename would then replace the link. The
+// bound stops a cycle; the kernel gives up at the same depth.
+func writeTarget(path string) string {
+	for range 40 {
+		link, err := os.Readlink(path)
+		if err != nil {
+			return path
+		}
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(path), link)
+		}
+		path = link
+	}
+	return path
 }
 
 // ResolveAlias maps an alias to its context name, returning name unchanged when

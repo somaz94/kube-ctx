@@ -225,6 +225,36 @@ func TestSaveWritesThroughASymlink(t *testing.T) {
 	}
 }
 
+// A dotfile manager can lay the link down before the file it points at exists.
+// Relative, as such links usually are, so the target resolves against the link.
+func TestSaveCreatesTheTargetOfADanglingSymlink(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "dotfiles-config.yaml")
+	link := filepath.Join(dir, FileName)
+	if err := os.Symlink("dotfiles-config.yaml", link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	cfg := &Config{path: link}
+	if err := cfg.SetAlias("p", "prod"); err != nil {
+		t.Fatalf("SetAlias: %v", err)
+	}
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the dangling symlink was replaced by a regular file (lstat err %v)", err)
+	}
+	data, err := os.ReadFile(real)
+	if err != nil {
+		t.Fatalf("the link's target was not created: %v", err)
+	}
+	if !strings.Contains(string(data), "p: prod") {
+		t.Errorf("target content:\n%s", data)
+	}
+}
+
 func TestSaveIntoUnwritableDir(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "not-a-dir")
 	if err := os.WriteFile(file, []byte("x"), filePerm); err != nil {
