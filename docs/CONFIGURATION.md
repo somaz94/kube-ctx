@@ -51,7 +51,7 @@ A rule carries **exactly one** matcher. Two is an error rather than a precedence
 
 An unrecognized `level` is treated as `safe`. A typo downgrades a rule rather than silently promoting a context to dangerous.
 
-`confirm` applies to **every** route to the cluster — `kctx ctx`, `kctx shell` and `kctx exec` — not just switching. A guard that only covered `ctx` would be walked straight past by `kctx exec prod -- kubectl delete deploy/api`, which is the more dangerous of the two. `kctx exec` also announces the guarded context it is about to run against. `-y` skips the prompt everywhere, for scripts, and declining exits `130` so `kctx ctx prod && ./deploy.sh` does not deploy.
+`confirm` applies to **every** route to the cluster — `kctx ctx`, `kctx shell`, `kctx exec` and `kctx export` — not just switching. A guard that only covered `ctx` would be walked straight past by `kctx exec prod -- kubectl delete deploy/api`, which is the more dangerous of the two. `kctx exec` also announces the guarded context it is about to run against. `-y` skips the prompt everywhere, for scripts, and declining exits `130` so `kctx ctx prod && ./deploy.sh` does not deploy.
 
 The name is the only thing every cluster has in common — an EKS ARN, a kind cluster and a kubeadm context share no label or field that says "production" — which is why the rules match on it.
 
@@ -211,9 +211,9 @@ Without the hook, kube-ctx edits the global kubeconfig, exactly the way kubectx 
 
 <br/>
 
-### Destructive edits inside a managed shell
+### Durable edits inside a managed shell
 
-`rename` and `delete` refuse to run inside a hook-managed shell or a `kctx shell` subshell:
+Durable edits — the commands that change the kubeconfig rather than switch within it: `rename`, `delete` and `import` — refuse to run inside a hook-managed shell or a `kctx shell` subshell:
 
 ```console
 $ kctx delete staging
@@ -268,7 +268,7 @@ test -n "$KUBE_CTX_ACTIVE"; and echo -n "[$KUBE_CTX_ACTIVE] "
 
 Session copies hold credentials, which is why nothing here is group- or world-readable. Copies left behind by a shell that was killed rather than exited are swept after 7 days, on the next session.
 
-Backups are taken before destructive edits only — `rename` and `delete`. A plain context or namespace switch is frequent and trivially reversible, so it does not pay the copy.
+Backups are taken before [durable edits](#durable-edits-inside-a-managed-shell) only. A plain context or namespace switch is frequent and trivially reversible, so it does not pay the copy.
 
 <br/>
 

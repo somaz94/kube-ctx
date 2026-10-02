@@ -301,7 +301,7 @@ Sweeps every context in parallel for the TLS certificates about to run out. `kct
 
 What is read is the certificate, not the resource managing it. Every `kubernetes.io/tls` secret carries the PEM, so `notAfter` is readable on a cluster with no CRD installed and without a guess about what issued anything. cert-manager `Certificate`s are then folded on top, keyed by the secret each one writes, because that is what says *who* renews a certificate and *when*. A managed row is renamed to the Certificate's own name: it is often not the secret's, and the Certificate is what an operator goes looking for.
 
-Only the first PEM block is parsed. A `tls.crt` commonly carries intermediates after the leaf and those outlive it, so reading the last block — or the maximum — would report a certificate as healthy for years after it stopped working.
+Only the first `CERTIFICATE` block is parsed. A `tls.crt` commonly carries intermediates after the leaf and those outlive it, so reading the last block — or the maximum — would report a certificate as healthy for years after it stopped working. Blocks of other types are skipped rather than taken for the leaf: a `tls.crt` can lead with a `TRUSTED CERTIFICATE`, and parsing that as the leaf would drop an otherwise readable secret in silence.
 
 The `IN` cell says how much time is left and how much of a problem that is:
 
@@ -335,7 +335,7 @@ kctx expiry --days 30 || notify-oncall
 
 With nothing due it exits `0` and says so on stderr — `Nothing expires within 30 days.` — leaving stdout empty for whatever is downstream.
 
-Thirty days is the default because it is the shortest notice that is still actionable: it clears a month of change freezes, and it is longer than the 15 days before `notAfter` at which cert-manager renews by default, so a healthy managed certificate turns up here having already scheduled its own fix.
+Thirty days is the default because it is the shortest notice that is still actionable: it clears a month of change freezes, and it is no shorter than cert-manager's default renewal lead (a third of the certificate's lifetime: 30 days for a 90-day certificate), so a healthy managed certificate turns up here having already scheduled its own fix.
 
 <br/>
 
@@ -460,6 +460,6 @@ Prints a wrapper function plus completions. With the hook installed, a switch ap
 | _n_ | `exec` passes the wrapped command's status through |
 | `128+`_sig_ | `exec`'s command was killed by a signal, the way a shell reports it |
 
-`1` and `2` are separated on purpose: `kctx doctor prod || page-oncall` should fire when a cluster is sick, not when `--kubeconfig` was misspelled.
+`1` and `2` are separated on purpose: `page-oncall` should fire when a cluster is sick, not when `--kubeconfig` was misspelled. `||` alone fires on both, so branch on the status — `kctx doctor prod || { [ $? -eq 2 ] && page-oncall; }` pages on `2` and stays quiet on `1`.
 
 So is `130`: `kctx ctx prod && ./deploy.sh` must not deploy when you declined the guard. Declining is not success, and it is not an error either — the shell's convention for "the user stopped this" is what it gets.
