@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.46.0
-	golang.org/x/text v0.40.0
+	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.37.1
 	k8s.io/apimachinery v0.37.1
