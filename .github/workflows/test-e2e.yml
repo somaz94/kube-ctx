@@ -59,7 +59,7 @@ jobs:
       # Pinned to a release so the kind it installs changes only through a Dependabot PR.
       # install_only keeps cluster creation in `make e2e-cluster`, which names it.
       - name: Install kind
-        uses: helm/kind-action@v1.15.0
+        uses: helm/kind-action@v1.15.1
         with:
           install_only: true
 
