@@ -248,6 +248,13 @@ Everything is created `0600`/`0700` — the copies hold credentials. Nothing is 
 
 <br/>
 
+## Related projects
+
+- [kube-diff](https://github.com/somaz94/kube-diff): Diff local manifests (plain YAML, Helm, Kustomize) against the live cluster.
+- [kube-events](https://github.com/somaz94/kube-events): View and summarize Kubernetes events, grouped by resource with warnings first.
+
+<br/>
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
