@@ -1,0 +1,8 @@
+# kube-ctx config for the README demo: production switches ask for the name.
+guards:
+  - match: '(^|[-_.])(prod|prd|production)([-_.]|$)'
+    level: danger
+    confirm: true
+    label: PROD
+  - match: '(^|[-_.])(stg|stage|staging|uat)([-_.]|$)'
+    level: warn

@@ -64,6 +64,20 @@ keystroke. They run in CI, which has no terminal.
 
 <br/>
 
+## Demo
+
+The GIF in the README runs the real `kctx` inside the recording container,
+against the synthetic kubeconfig and guard config in `examples/demo/`. Nothing
+in it reaches an API server. When the picker, the guard prompt or the switch
+message changes, regenerate it from the repo root:
+
+```bash
+GOOS=linux go build -o bin/linux/kctx ./cmd
+docker run --rm -v "$PWD:/vhs" ghcr.io/charmbracelet/vhs examples/demo/demo.tape
+```
+
+<br/>
+
 ## Layout
 
 ```

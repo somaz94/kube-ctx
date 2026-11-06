@@ -8,6 +8,8 @@
 
 `kctx` — a single-binary replacement for `kubectx` and `kubens` that fixes the three things which make them risky once you have more than a couple of clusters: a current-context every terminal shares, no guard rail in front of production, and an external `fzf` dependency for the picker.
 
+![kctx opens its built-in picker, narrows it to the production contexts, and makes you retype prod-eks before it switches](examples/demo/demo.gif)
+
 > For detailed documentation, see the [docs/](docs/) folder:
 >
 > [Usage](docs/USAGE.md) |
