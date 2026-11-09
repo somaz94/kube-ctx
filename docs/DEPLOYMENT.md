@@ -37,7 +37,7 @@ scoop bucket add somaz94 https://github.com/somaz94/scoop-bucket
 scoop install kube-ctx
 ```
 
-The picker needs a terminal that understands ANSI escapes — Windows Terminal does, `cmd.exe` in its default configuration does not. Everything else works either way.
+The picker does not open on Windows yet: it reads keys from `/dev/tty`, which Windows does not have. With no argument, `kctx` and `kctx ns` print the list instead, so pass the name you want. Everything else works.
 
 <br/>
 

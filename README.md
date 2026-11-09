@@ -28,7 +28,7 @@
 | **Scope of a switch** | Global — every terminal follows | Per-terminal via the shell hook or `kctx shell`, global otherwise |
 | **Production guard** | None | Contexts — and the namespaces inside them — classified by name, exact list, prefix or suffix; colored everywhere, and `confirm` gates `ctx`, `ns`, `shell`, `exec` and `export` alike |
 | **Context per project** | — | `kctx bind`: `cd` into a repo, this terminal follows |
-| **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency |
+| **Interactive picker** | Needs `fzf` on `$PATH` | Built in — no external dependency (not on Windows yet, where `kctx` prints the list) |
 | **Run against another cluster** | Switch, run, switch back | `kctx exec prod -- kubectl get pods` |
 | **The same question, every cluster** | A `for` loop that switches and hopes | `kctx exec --all -- kubectl get nodes`, in parallel |
 | **Namespace list offline** | Fails when the API server is unreachable | Falls back to a cache and says so |
@@ -36,7 +36,6 @@
 | **Certificates about to expire** | — | `kctx expiry`: every cluster's TLS secrets and cert-manager Certificates in one table |
 | **Adding someone's kubeconfig** | Hand-merge, or `--flatten` and hope the names do not clash | `kctx import`: colliding stanzas are disambiguated, never overwritten |
 | **Handing one context over** | Edit a copy by hand | `kctx export prod --flatten -f prod.yaml` |
-| **kubeconfig writes** | Re-emits the YAML | `clientcmd`, the same path `kubectl` uses — multi-file `$KUBECONFIG` safe |
 | **Backups** | — | Automatic before every destructive kubeconfig edit |
 | **Binaries** | Two | One |
 
